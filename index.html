@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🏐 Sorteio de Times — Vôlei de Areia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- GATE DE SENHA -->
+<div id="gate" class="gate">
+  <div class="gate-card">
+    <div class="gate-ball">🏐</div>
+    <h1>Sorteio do Vôlei de Areia</h1>
+    <p>Acesso restrito à diretoria. Digite a senha para continuar.</p>
+    <input id="password-input" type="password" placeholder="Senha" autocomplete="off" />
+    <button id="password-submit" class="btn btn-primary">Entrar</button>
+    <p id="password-error" class="error-msg"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="app hidden">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-ball">🏐</span>
+        <span class="brand-text">Vôlei de Areia — Sorteio de Times</span>
+      </div>
+      <div class="conn-status">
+        <span id="conn-dot" class="conn-dot"></span>
+        <span id="conn-label">conectando…</span>
+      </div>
+    </div>
+    <nav class="day-tabs">
+      <button class="day-tab" data-env="quarta">🌅 Quarta-feira</button>
+      <button class="day-tab" data-env="sexta">🌇 Sexta-feira</button>
+    </nav>
+  </header>
+
+  <main class="main">
+
+    <section class="panel config-panel">
+      <div class="panel-header">
+        <h2>Painel de Sorteio</h2>
+        <p class="subtitle" id="env-subtitle">Monte os times da Quarta em segundos</p>
+      </div>
+
+      <div class="config-grid">
+        <div class="config-field">
+          <label for="num-teams">Nº de times</label>
+          <input type="number" id="num-teams" min="2" max="8" value="2" />
+        </div>
+        <div class="config-field">
+          <label>Jogadores cadastrados</label>
+          <div class="config-readonly" id="player-count">0</div>
+        </div>
+        <div class="config-field">
+          <label>Jogadores por time</label>
+          <div class="config-readonly" id="players-per-team">—</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="btn-shuffle" class="btn btn-shuffle">🔀 Sortear Times</button>
+        <button id="btn-clear-draw" class="btn btn-ghost">↺ Limpar Sorteio</button>
+      </div>
+      <p class="hint">O sorteio equilibra os times pela nota de habilidade — a diferença entre o time mais forte e o mais fraco fica a menor possível.</p>
+    </section>
+
+    <section class="panel players-panel">
+      <div class="panel-header">
+        <h2>Jogadores — <span id="env-label-players">Quarta</span></h2>
+        <p class="subtitle">Preencha nome e nota de cada jogador. Linhas em branco são ignoradas no sorteio.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="players-table">
+          <thead>
+            <tr><th>Nome</th><th>Nota</th><th></th></tr>
+          </thead>
+          <tbody id="players-tbody">
+          </tbody>
+        </table>
+      </div>
+      <div class="action-row">
+        <button id="btn-add-row" class="btn btn-ghost">+ Adicionar linha</button>
+      </div>
+    </section>
+
+    <section class="panel teams-panel hidden" id="teams-panel">
+      <div class="panel-header">
+        <h2>Times Sorteados — <span id="env-label-teams">Quarta</span></h2>
+      </div>
+      <div class="teams-grid" id="teams-grid"></div>
+    </section>
+
+  </main>
+
+  <footer class="footer">Feito com 🏐 e ☀️ para a galera da areia</footer>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
