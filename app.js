@@ -23,6 +23,8 @@ let playersChannel = null;
 let drawsChannel = null;
 let extraRows = 0; // blank rows added beyond the minimum, via "+ Adicionar linha"
 const MIN_PLAYER_ROWS = 20;
+let knownPlayers = []; // shared directory of every player ever added, across both days
+let knownPlayersChannel = null;
 
 // ---------- Gate ----------
 function initGate() {
@@ -91,6 +93,9 @@ function startApp() {
   document.getElementById("btn-shuffle").addEventListener("click", onShuffle);
   document.getElementById("btn-clear-draw").addEventListener("click", onClearDraw);
 
+  loadKnownPlayers();
+  subscribeKnownPlayersRealtime();
+
   switchEnv("quarta");
 }
 
@@ -151,6 +156,76 @@ function subscribeRealtime() {
     .subscribe();
 }
 
+// ---------- Known players (shared directory, reused across Quarta/Sexta) ----------
+async function loadKnownPlayers() {
+  const { data, error } = await supabaseClient
+    .from("known_players")
+    .select("*")
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+  knownPlayers = data || [];
+  renderKnownPlayers();
+}
+
+function subscribeKnownPlayersRealtime() {
+  knownPlayersChannel = supabaseClient
+    .channel("known-players")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "known_players" },
+      () => loadKnownPlayers()
+    )
+    .subscribe();
+}
+
+async function rememberPlayer(name, skill) {
+  const { error } = await supabaseClient
+    .from("known_players")
+    .upsert({ name, skill, updated_at: new Date().toISOString() }, { onConflict: "name" });
+  if (error) console.error("Erro ao salvar na base de jogadores:", error);
+}
+
+async function addKnownPlayerToEnv(known) {
+  const { error } = await supabaseClient
+    .from("players")
+    .insert([{ environment: currentEnv, name: known.name, skill: known.skill }]);
+  if (error) {
+    alert("Erro ao adicionar jogador: " + error.message);
+    return;
+  }
+  await loadPlayers();
+}
+
+function renderKnownPlayers() {
+  const wrap = document.getElementById("known-players-wrap");
+  const list = document.getElementById("known-players-list");
+  if (!wrap || !list) return;
+
+  const currentNames = new Set(players.map((p) => p.name.trim().toLowerCase()));
+  const available = knownPlayers.filter((k) => !currentNames.has(k.name.trim().toLowerCase()));
+
+  if (available.length === 0) {
+    wrap.classList.add("hidden");
+    list.innerHTML = "";
+    return;
+  }
+  wrap.classList.remove("hidden");
+
+  list.innerHTML = "";
+  available.forEach((k) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "known-chip";
+    chip.innerHTML = `${escapeHtml(k.name)} <span class="skill-badge">${k.skill}</span>`;
+    chip.addEventListener("click", () => addKnownPlayerToEnv(k));
+    list.appendChild(chip);
+  });
+}
+
 // ---------- Players CRUD ----------
 async function loadPlayers() {
   const { data, error } = await supabaseClient
@@ -167,6 +242,7 @@ async function loadPlayers() {
   setConnStatus("online");
   players = data || [];
   renderPlayers();
+  renderKnownPlayers();
   updateConfigSummary();
 }
 
@@ -202,6 +278,7 @@ async function handleRowChange(existingPlayer, nameInput, skillSelect) {
       alert("Erro ao atualizar jogador: " + error.message);
       return;
     }
+    await rememberPlayer(name, skill);
     await loadPlayers();
   } else {
     // Blank row: only save once both fields are filled in.
@@ -214,6 +291,7 @@ async function handleRowChange(existingPlayer, nameInput, skillSelect) {
       alert("Erro ao adicionar jogador: " + error.message);
       return;
     }
+    await rememberPlayer(name, skill);
     await loadPlayers();
   }
 }

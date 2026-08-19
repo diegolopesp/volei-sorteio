@@ -280,6 +280,50 @@ input, select { font-family: inherit; }
 }
 .empty-msg { text-align: center; color: var(--ink-soft); padding: 20px; font-size: 14px; }
 
+/* ---------- Known players (quick-add chips) ---------- */
+.known-players-wrap {
+  background: var(--sand-light);
+  border: 2px dashed #eee0bd;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.known-players-label {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.known-players-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.known-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  border: 2px solid #eee0bd;
+  border-radius: 999px;
+  padding: 6px 8px 6px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.known-chip:hover {
+  border-color: var(--sea-green);
+  transform: translateY(-1px);
+}
+.known-chip .skill-badge {
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+
 /* ---------- Teams panel ---------- */
 .teams-grid {
   display: grid;
