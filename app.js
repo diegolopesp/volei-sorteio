@@ -491,7 +491,7 @@ function renderTeams() {
     card.style.setProperty("--team-color", team.colorHex);
 
     const playersHtml = team.players
-      .map((p) => `<div class="team-player-row"><span>${escapeHtml(p.name)}</span><span class="skill-badge">${p.skill}</span></div>`)
+      .map((p) => `<div class="team-player-row"><span>${escapeHtml(p.name)}</span></div>`)
       .join("");
 
     card.innerHTML = `
