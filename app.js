@@ -176,7 +176,7 @@ function updateAdminUI() {
   document.getElementById("btn-admin-toggle").classList.toggle("hidden", isAdmin);
   document.getElementById("admin-badge").classList.toggle("hidden", !isAdmin);
   document.getElementById("players-subtitle").textContent = isAdmin
-    ? "Cadastre nome e as 4 notas de habilidade (0 a 5 estrelas). Linhas em branco são ignoradas no sorteio."
+    ? "Digite o nome, escolha as estrelas quando quiser e clique em Salvar para confirmar cada jogador. Linhas sem nome salvo são ignoradas no sorteio."
     : "Marque quem está presente hoje. As notas de habilidade só aparecem no modo gerencial.";
 }
 
@@ -382,53 +382,56 @@ async function onTogglePresent(player, present) {
   updateConfigSummary();
 }
 
-async function handleRowChange(existingPlayer, nameInput, skillSelects) {
+async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn) {
+  // Nada é salvo sozinho ao digitar/escolher — só quando este botão "Salvar" é
+  // clicado (ou Enter no campo de nome). As estrelas podem ficar em branco e
+  // ser preenchidas depois; uma estrela não escolhida mantém a nota atual do
+  // jogador (ou 0, se ele ainda não existir).
   const name = nameInput.value.trim();
+  if (!name) {
+    if (existingPlayer) {
+      nameInput.value = existingPlayer.name; // não deixa salvar nome vazio; use o ✕ para remover
+    } else {
+      alert("Digite o nome do jogador antes de salvar.");
+    }
+    return;
+  }
+
   const skills = {};
-  let allFilled = true;
   SKILLS.forEach((s) => {
     const v = skillSelects[s.key].value;
-    if (v === "") allFilled = false;
-    skills[s.key] = v === "" ? null : parseInt(v, 10);
+    skills[s.key] = v === "" ? (existingPlayer ? existingPlayer[s.key] : 0) : parseInt(v, 10);
   });
 
-  if (existingPlayer) {
-    // Row tied to a player already saved in the database.
-    if (!name) {
-      // Don't auto-delete on empty name; revert and let the ✕ button handle removal.
-      nameInput.value = existingPlayer.name;
-      return;
-    }
-    if (!allFilled) return; // wait until all 4 notas are chosen
-    const unchanged =
-      name === existingPlayer.name &&
-      SKILLS.every((s) => skills[s.key] === existingPlayer[s.key]);
-    if (unchanged) return;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Salvando…";
+  }
 
+  if (existingPlayer) {
     const { error } = await supabaseClient
       .from("players")
       .update({ name, ...skills })
       .eq("id", existingPlayer.id);
     if (error) {
       alert("Erro ao atualizar jogador: " + error.message);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 Salvar"; }
       return;
     }
-    await rememberPlayer(name, skills);
-    await loadPlayers();
   } else {
-    // Blank row: only save once name and all 4 notas are filled in.
-    if (!name || !allFilled) return;
-
     const { error } = await supabaseClient
       .from("players")
       .insert([{ environment: currentEnv, name, present: true, ...skills }]);
     if (error) {
       alert("Erro ao adicionar jogador: " + error.message);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 Salvar"; }
       return;
     }
-    await rememberPlayer(name, skills);
-    await loadPlayers();
   }
+
+  // Confirma o jogador (novo ou editado) na base reutilizável "já jogaram antes".
+  await rememberPlayer(name, skills);
+  await loadPlayers();
 }
 
 function renderTableHead() {
@@ -507,7 +510,15 @@ function renderPlayers() {
       });
 
       const actionTd = document.createElement("td");
-      actionTd.style.textAlign = "right";
+      actionTd.className = "row-actions";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "btn-save-mini";
+      saveBtn.textContent = "💾 Salvar";
+      saveBtn.addEventListener("click", () => handleRowChange(p, nameInput, skillSelects, saveBtn));
+      actionTd.appendChild(saveBtn);
+
       if (p) {
         const delBtn = document.createElement("button");
         delBtn.className = "btn-danger-mini";
@@ -518,9 +529,10 @@ function renderPlayers() {
       }
       tr.appendChild(actionTd);
 
-      const saveHandler = () => handleRowChange(p, nameInput, skillSelects);
-      nameInput.addEventListener("blur", saveHandler);
-      Object.values(skillSelects).forEach((sel) => sel.addEventListener("change", saveHandler));
+      // Enter no campo de nome também salva, sem precisar clicar no botão.
+      nameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") handleRowChange(p, nameInput, skillSelects, saveBtn);
+      });
     }
 
     tbody.appendChild(tr);

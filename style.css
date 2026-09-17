@@ -99,6 +99,21 @@ input, select { font-family: inherit; }
   font-size: 16px;
   padding: 4px 8px;
 }
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.btn-save-mini {
+  background: var(--sea-green);
+  color: var(--white);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.btn-save-mini:hover { background: #0d6b5b; }
+.btn-save-mini:disabled { opacity: 0.6; cursor: default; }
 
 /* ---------- App shell ---------- */
 .app { min-height: 100vh; display: flex; flex-direction: column; }
