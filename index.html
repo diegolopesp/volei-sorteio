@@ -35,6 +35,16 @@
         <span id="conn-dot" class="conn-dot"></span>
         <span id="conn-label">conectando…</span>
       </div>
+      <span id="admin-badge" class="admin-badge hidden">
+        🔓 Modo gerencial
+        <button id="btn-admin-logout" class="admin-logout" title="Sair do modo gerencial">Sair</button>
+      </span>
+      <button id="btn-admin-toggle" class="admin-toggle" title="Acesso gerencial (ver/editar notas)">🔒 Gerencial</button>
+    </div>
+    <div id="admin-bar" class="admin-bar hidden">
+      <input id="admin-password-input" type="password" placeholder="Senha gerencial" autocomplete="off" />
+      <button id="admin-password-submit" class="btn btn-ghost btn-mini">Entrar</button>
+      <span id="admin-error" class="error-msg-inline"></span>
     </div>
     <nav class="day-tabs">
       <button class="day-tab" data-env="quarta">🌅 Quarta-feira</button>
@@ -83,7 +93,7 @@
     <section class="panel players-panel">
       <div class="panel-header">
         <h2>Jogadores — <span id="env-label-players">Quarta</span></h2>
-        <p class="subtitle">Preencha nome e nota de cada jogador. Linhas em branco são ignoradas no sorteio.</p>
+        <p class="subtitle" id="players-subtitle">Marque quem está presente hoje. As notas de habilidade só aparecem no modo gerencial.</p>
       </div>
 
       <div id="known-players-wrap" class="known-players-wrap hidden">
@@ -93,15 +103,14 @@
 
       <div class="table-wrap">
         <table class="players-table">
-          <thead>
-            <tr><th>Nome</th><th>Nota</th><th></th></tr>
+          <thead id="players-thead">
           </thead>
           <tbody id="players-tbody">
           </tbody>
         </table>
       </div>
       <div class="action-row">
-        <button id="btn-add-row" class="btn btn-ghost">+ Adicionar linha</button>
+        <button id="btn-add-row" class="btn btn-ghost admin-only hidden">+ Adicionar linha</button>
       </div>
     </section>
 

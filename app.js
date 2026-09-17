@@ -15,6 +15,14 @@ const TEAM_COLORS = [
 
 const ENV_LABELS = { quarta: "Quarta", sexta: "Sexta" };
 
+// As 4 habilidades avaliadas, cada uma de 0 a 5 estrelas.
+const SKILLS = [
+  { key: "skill_saque", label: "Saque" },
+  { key: "skill_levantamento", label: "Levant." },
+  { key: "skill_recepcao", label: "Recep." },
+  { key: "skill_movimentacao", label: "Moviment." },
+];
+
 let supabaseClient = null;
 let currentEnv = "quarta";
 let players = []; // players for current env
@@ -25,6 +33,26 @@ let extraRows = 0; // blank rows added beyond the minimum, via "+ Adicionar linh
 const MIN_PLAYER_ROWS = 20;
 let knownPlayers = []; // shared directory of every player ever added, across both days
 let knownPlayersChannel = null;
+let isAdmin = false; // unlocked with ADMIN_PASSWORD — controls visibility of skill notes
+
+// Média das 4 habilidades — usada para balancear os times. Só é exibida na UI
+// quando isAdmin é true (o objeto do jogador continua tendo os valores porque
+// o dado chega do Supabase para qualquer usuário logado; o que fica restrito
+// é a exibição na tela, no mesmo nível de proteção da senha de acesso geral —
+// não é uma autenticação forte de servidor, ver README).
+function overallSkill(p) {
+  const sum = SKILLS.reduce((acc, s) => acc + (Number(p[s.key]) || 0), 0);
+  return sum / SKILLS.length;
+}
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 // ---------- Gate ----------
 function initGate() {
@@ -60,6 +88,17 @@ function initGate() {
 
 // ---------- App bootstrap ----------
 function startApp() {
+  // Wired up first (and independent of the Supabase connection below) so the
+  // admin (gerencial) gate still works even if Supabase fails to load.
+  document.getElementById("btn-admin-toggle").addEventListener("click", toggleAdminBar);
+  document.getElementById("btn-admin-logout").addEventListener("click", adminLogout);
+  document.getElementById("admin-password-submit").addEventListener("click", tryAdminLogin);
+  document.getElementById("admin-password-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") tryAdminLogin();
+  });
+  if (sessionStorage.getItem("volei_admin") === "1") isAdmin = true;
+  updateAdminUI();
+
   if (
     !SUPABASE_URL ||
     SUPABASE_URL.startsWith("COLE_AQUI") ||
@@ -97,6 +136,48 @@ function startApp() {
   subscribeKnownPlayersRealtime();
 
   switchEnv("quarta");
+}
+
+// ---------- Admin gate (senha gerencial — controla quem vê as notas) ----------
+function toggleAdminBar() {
+  document.getElementById("admin-bar").classList.toggle("hidden");
+  document.getElementById("admin-password-input").focus();
+}
+
+function tryAdminLogin() {
+  const input = document.getElementById("admin-password-input");
+  const err = document.getElementById("admin-error");
+  if (input.value === ADMIN_PASSWORD) {
+    isAdmin = true;
+    sessionStorage.setItem("volei_admin", "1");
+    input.value = "";
+    err.textContent = "";
+    document.getElementById("admin-bar").classList.add("hidden");
+    updateAdminUI();
+    renderPlayers();
+    renderKnownPlayers();
+    renderTeams();
+  } else {
+    err.textContent = "Senha gerencial incorreta.";
+  }
+}
+
+function adminLogout() {
+  isAdmin = false;
+  sessionStorage.removeItem("volei_admin");
+  updateAdminUI();
+  renderPlayers();
+  renderKnownPlayers();
+  renderTeams();
+}
+
+function updateAdminUI() {
+  document.body.classList.toggle("is-admin", isAdmin);
+  document.getElementById("btn-admin-toggle").classList.toggle("hidden", isAdmin);
+  document.getElementById("admin-badge").classList.toggle("hidden", !isAdmin);
+  document.getElementById("players-subtitle").textContent = isAdmin
+    ? "Cadastre nome e as 4 notas de habilidade (0 a 5 estrelas). Linhas em branco são ignoradas no sorteio."
+    : "Marque quem está presente hoje. As notas de habilidade só aparecem no modo gerencial.";
 }
 
 function setConnStatus(status) {
@@ -182,17 +263,19 @@ function subscribeKnownPlayersRealtime() {
     .subscribe();
 }
 
-async function rememberPlayer(name, skill) {
+async function rememberPlayer(name, skills) {
   const { error } = await supabaseClient
     .from("known_players")
-    .upsert({ name, skill, updated_at: new Date().toISOString() }, { onConflict: "name" });
+    .upsert({ name, ...skills, updated_at: new Date().toISOString() }, { onConflict: "name" });
   if (error) console.error("Erro ao salvar na base de jogadores:", error);
 }
 
 async function addKnownPlayerToEnv(known) {
+  const skills = {};
+  SKILLS.forEach((s) => { skills[s.key] = known[s.key] ?? 0; });
   const { error } = await supabaseClient
     .from("players")
-    .insert([{ environment: currentEnv, name: known.name, skill: known.skill }]);
+    .insert([{ environment: currentEnv, name: known.name, present: true, ...skills }]);
   if (error) {
     alert("Erro ao adicionar jogador: " + error.message);
     return;
@@ -220,7 +303,9 @@ function renderKnownPlayers() {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "known-chip";
-    chip.innerHTML = `${escapeHtml(k.name)} <span class="skill-badge">${k.skill}</span>`;
+    // Nota (média das 4 habilidades) só aparece no modo gerencial.
+    const badge = isAdmin ? ` <span class="skill-badge">${overallSkill(k).toFixed(1)}</span>` : "";
+    chip.innerHTML = `${escapeHtml(k.name)}${badge}`;
     chip.addEventListener("click", () => addKnownPlayerToEnv(k));
     list.appendChild(chip);
   });
@@ -256,9 +341,29 @@ async function onDeletePlayer(id) {
   await loadPlayers();
 }
 
-async function handleRowChange(existingPlayer, nameInput, skillSelect) {
+async function onTogglePresent(player, present) {
+  const { error } = await supabaseClient
+    .from("players")
+    .update({ present })
+    .eq("id", player.id);
+  if (error) {
+    alert("Erro ao atualizar presença: " + error.message);
+    await loadPlayers();
+    return;
+  }
+  player.present = present;
+  updateConfigSummary();
+}
+
+async function handleRowChange(existingPlayer, nameInput, skillSelects) {
   const name = nameInput.value.trim();
-  const skill = parseInt(skillSelect.value, 10);
+  const skills = {};
+  let allFilled = true;
+  SKILLS.forEach((s) => {
+    const v = skillSelects[s.key].value;
+    if (v === "") allFilled = false;
+    skills[s.key] = v === "" ? null : parseInt(v, 10);
+  });
 
   if (existingPlayer) {
     // Row tied to a player already saved in the database.
@@ -267,88 +372,131 @@ async function handleRowChange(existingPlayer, nameInput, skillSelect) {
       nameInput.value = existingPlayer.name;
       return;
     }
-    if (!skill) return; // wait until a nota is chosen
-    if (name === existingPlayer.name && skill === existingPlayer.skill) return;
+    if (!allFilled) return; // wait until all 4 notas are chosen
+    const unchanged =
+      name === existingPlayer.name &&
+      SKILLS.every((s) => skills[s.key] === existingPlayer[s.key]);
+    if (unchanged) return;
 
     const { error } = await supabaseClient
       .from("players")
-      .update({ name, skill })
+      .update({ name, ...skills })
       .eq("id", existingPlayer.id);
     if (error) {
       alert("Erro ao atualizar jogador: " + error.message);
       return;
     }
-    await rememberPlayer(name, skill);
+    await rememberPlayer(name, skills);
     await loadPlayers();
   } else {
-    // Blank row: only save once both fields are filled in.
-    if (!name || !skill) return;
+    // Blank row: only save once name and all 4 notas are filled in.
+    if (!name || !allFilled) return;
 
     const { error } = await supabaseClient
       .from("players")
-      .insert([{ environment: currentEnv, name, skill }]);
+      .insert([{ environment: currentEnv, name, present: true, ...skills }]);
     if (error) {
       alert("Erro ao adicionar jogador: " + error.message);
       return;
     }
-    await rememberPlayer(name, skill);
+    await rememberPlayer(name, skills);
     await loadPlayers();
   }
 }
 
+function renderTableHead() {
+  const thead = document.getElementById("players-thead");
+  let cols = "<th>Nome</th><th>Presente</th>";
+  if (isAdmin) {
+    SKILLS.forEach((s) => { cols += `<th>${s.label}</th>`; });
+    cols += "<th></th>";
+  }
+  thead.innerHTML = `<tr>${cols}</tr>`;
+}
+
 function renderPlayers() {
+  renderTableHead();
   const tbody = document.getElementById("players-tbody");
   tbody.innerHTML = "";
 
-  const totalRows = Math.max(MIN_PLAYER_ROWS, players.length) + extraRows;
+  // Non-admins never get blank editable rows — they can't add/edit players or
+  // see notas, only the roster that already exists plus a presence checkbox.
+  const totalRows = isAdmin ? Math.max(MIN_PLAYER_ROWS, players.length) + extraRows : players.length;
 
   for (let i = 0; i < totalRows; i++) {
     const p = players[i] || null;
+    if (!p && !isAdmin) continue;
+
     const tr = document.createElement("tr");
 
+    // Nome
     const nameTd = document.createElement("td");
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.placeholder = "Nome do jogador";
-    nameInput.value = p ? p.name : "";
-    nameTd.appendChild(nameInput);
+    let nameInput = null;
+    if (isAdmin) {
+      nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.placeholder = "Nome do jogador";
+      nameInput.value = p ? p.name : "";
+      nameTd.appendChild(nameInput);
+    } else {
+      nameTd.textContent = p.name;
+    }
+    tr.appendChild(nameTd);
 
-    const skillTd = document.createElement("td");
-    const skillSelect = document.createElement("select");
-    const placeholderOpt = document.createElement("option");
-    placeholderOpt.value = "";
-    placeholderOpt.textContent = "Nota";
-    placeholderOpt.disabled = true;
-    skillSelect.appendChild(placeholderOpt);
-    [1, 2, 3, 4, 5].forEach((n) => {
-      const opt = document.createElement("option");
-      opt.value = String(n);
-      opt.textContent = String(n);
-      skillSelect.appendChild(opt);
-    });
-    skillSelect.value = p ? String(p.skill) : "";
-    if (!p) placeholderOpt.selected = true;
-    skillTd.appendChild(skillSelect);
-
-    const actionTd = document.createElement("td");
-    actionTd.style.textAlign = "right";
+    // Presente
+    const presentTd = document.createElement("td");
+    presentTd.style.textAlign = "center";
     if (p) {
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn-danger-mini";
-      delBtn.title = "Remover";
-      delBtn.textContent = "✕";
-      delBtn.addEventListener("click", () => onDeletePlayer(p.id));
-      actionTd.appendChild(delBtn);
+      const presentCheckbox = document.createElement("input");
+      presentCheckbox.type = "checkbox";
+      presentCheckbox.checked = p.present !== false;
+      presentCheckbox.addEventListener("change", () => onTogglePresent(p, presentCheckbox.checked));
+      presentTd.appendChild(presentCheckbox);
+    }
+    tr.appendChild(presentTd);
+
+    // Notas de habilidade — só entram no DOM se isAdmin, para não vazar o dado
+    // na tela pra quem não tem a senha gerencial.
+    if (isAdmin) {
+      const skillSelects = {};
+      SKILLS.forEach((s) => {
+        const td = document.createElement("td");
+        const select = document.createElement("select");
+        const placeholderOpt = document.createElement("option");
+        placeholderOpt.value = "";
+        placeholderOpt.textContent = "—";
+        select.appendChild(placeholderOpt);
+        [0, 1, 2, 3, 4, 5].forEach((n) => {
+          const opt = document.createElement("option");
+          opt.value = String(n);
+          opt.textContent = n === 0 ? "0" : "★".repeat(n);
+          select.appendChild(opt);
+        });
+        select.value = p ? String(p[s.key] ?? 0) : "";
+        if (!p) placeholderOpt.selected = true;
+        td.appendChild(select);
+        tr.appendChild(td);
+        skillSelects[s.key] = select;
+      });
+
+      const actionTd = document.createElement("td");
+      actionTd.style.textAlign = "right";
+      if (p) {
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-danger-mini";
+        delBtn.title = "Remover";
+        delBtn.textContent = "✕";
+        delBtn.addEventListener("click", () => onDeletePlayer(p.id));
+        actionTd.appendChild(delBtn);
+      }
+      tr.appendChild(actionTd);
+
+      const saveHandler = () => handleRowChange(p, nameInput, skillSelects);
+      nameInput.addEventListener("blur", saveHandler);
+      Object.values(skillSelects).forEach((sel) => sel.addEventListener("change", saveHandler));
     }
 
-    tr.appendChild(nameTd);
-    tr.appendChild(skillTd);
-    tr.appendChild(actionTd);
     tbody.appendChild(tr);
-
-    const saveHandler = () => handleRowChange(p, nameInput, skillSelect);
-    nameInput.addEventListener("blur", saveHandler);
-    skillSelect.addEventListener("change", saveHandler);
   }
 }
 
@@ -360,9 +508,10 @@ function escapeHtml(str) {
 
 // ---------- Config summary ----------
 function updateConfigSummary() {
-  document.getElementById("player-count").textContent = players.length;
+  const presentCount = players.filter((p) => p.present !== false).length;
+  document.getElementById("player-count").textContent = `${presentCount} presentes / ${players.length} total`;
   const numTeams = parseInt(document.getElementById("num-teams").value, 10) || 2;
-  const perTeam = players.length ? (players.length / numTeams).toFixed(1) : "—";
+  const perTeam = presentCount ? (presentCount / numTeams).toFixed(1) : "—";
   document.getElementById("players-per-team").textContent = perTeam;
 }
 
@@ -399,7 +548,12 @@ async function loadDraw() {
 }
 
 function balanceTeams(playerList, numTeams) {
-  const sorted = [...playerList].sort((a, b) => b.skill - a.skill);
+  // Embaralha primeiro para que, com jogadores de nota igual (ou empatada no
+  // arredondamento), o resultado mude a cada clique em "Sortear" — sort() do
+  // JS é estável, então o empate entre iguais mantém a ordem embaralhada em
+  // vez de sempre cair na mesma sequência.
+  const shuffled = shuffleArray(playerList);
+  const sorted = shuffled.sort((a, b) => overallSkill(b) - overallSkill(a));
   const baseSize = Math.floor(sorted.length / numTeams);
   const remainder = sorted.length % numTeams;
   const capacities = Array.from({ length: numTeams }, (_, i) => baseSize + (i < remainder ? 1 : 0));
@@ -421,7 +575,7 @@ function balanceTeams(playerList, numTeams) {
       bestIdx = teams.findIndex((t, idx) => t.players.length < capacities[idx]);
     }
     teams[bestIdx].players.push(player);
-    teams[bestIdx].total += player.skill;
+    teams[bestIdx].total += overallSkill(player);
   });
 
   return teams.map((t, idx) => ({
@@ -434,19 +588,20 @@ function balanceTeams(playerList, numTeams) {
 
 async function onShuffle() {
   const numTeams = parseInt(document.getElementById("num-teams").value, 10) || 2;
-  if (players.length < numTeams) {
-    alert(`Cadastre pelo menos ${numTeams} jogador(es) para sortear ${numTeams} times.`);
+  const presentPlayers = players.filter((p) => p.present !== false);
+  if (presentPlayers.length < numTeams) {
+    alert(`Marque pelo menos ${numTeams} jogador(es) como presentes para sortear ${numTeams} times.`);
     return;
   }
 
-  const teams = balanceTeams(players, numTeams);
+  const teams = balanceTeams(presentPlayers, numTeams);
   const payload = {
     environment: currentEnv,
     num_teams: numTeams,
     teams: teams.map((t) => ({
       colorName: t.color.name,
       colorHex: t.color.hex,
-      players: t.players.map((p) => ({ id: p.id, name: p.name, skill: p.skill })),
+      players: t.players.map((p) => ({ id: p.id, name: p.name, skill: overallSkill(p) })),
       total: t.total,
       avg: t.avg,
     })),
@@ -493,11 +648,13 @@ function renderTeams() {
     const playersHtml = team.players
       .map((p) => `<div class="team-player-row"><span>${escapeHtml(p.name)}</span></div>`)
       .join("");
+    // Média de habilidade do time só aparece no modo gerencial.
+    const avgHtml = isAdmin ? `<span class="team-avg">★ ${team.avg.toFixed(2)}</span>` : "";
 
     card.innerHTML = `
       <div class="team-card-header">
         <span>${team.colorName}</span>
-        <span class="team-avg">★ ${team.avg.toFixed(2)}</span>
+        ${avgHtml}
       </div>
       <div class="team-card-body">${playersHtml}</div>
     `;
