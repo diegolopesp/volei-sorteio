@@ -10,3 +10,4 @@ const SUPABASE_ANON_KEY = "sb_publishable_-c5olXkJG0Bz1S6xjL7lgg_LiMD0DD5";
 // Senha simples compartilhada entre os 3 diretores para poder editar/sortear.
 // Troque por uma senha da sua escolha.
 const SHARED_PASSWORD = "volei2026";
+
