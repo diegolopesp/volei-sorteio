@@ -711,5 +711,3 @@ function renderTeams() {
 
 // ---------- Init ----------
 document.addEventListener("DOMContentLoaded", initGate);
-
-https://drive.google.com/drive/folders/14HYGim8bd1MxWTP6dSxul-a1ECi2JBu4?usp=sharing
