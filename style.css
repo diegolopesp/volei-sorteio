@@ -360,24 +360,45 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .known-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   background: var(--white);
   border: 2px solid #eee0bd;
   border-radius: 999px;
-  padding: 6px 8px 6px 14px;
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--ink);
+  overflow: hidden;
   transition: transform 0.12s ease, border-color 0.12s ease;
 }
 .known-chip:hover {
   border-color: var(--sea-green);
   transform: translateY(-1px);
 }
+.known-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 6px 10px 6px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
 .known-chip .skill-badge {
   width: 22px;
   height: 22px;
   font-size: 12px;
+}
+.known-chip-remove {
+  background: transparent;
+  border: none;
+  border-left: 2px solid #eee0bd;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.known-chip-remove:hover {
+  background: rgba(217, 83, 79, 0.1);
 }
 
 /* ---------- Teams panel ---------- */

@@ -283,6 +283,16 @@ async function addKnownPlayerToEnv(known) {
   await loadPlayers();
 }
 
+async function deleteKnownPlayer(known) {
+  if (!confirm(`Remover "${known.name}" da base de jogadores? Isso não afeta quem já está sorteado hoje, só some da lista de "já jogaram antes".`)) return;
+  const { error } = await supabaseClient.from("known_players").delete().eq("id", known.id);
+  if (error) {
+    alert("Erro ao remover da base de jogadores: " + error.message);
+    return;
+  }
+  await loadKnownPlayers();
+}
+
 function renderKnownPlayers() {
   const wrap = document.getElementById("known-players-wrap");
   const list = document.getElementById("known-players-list");
@@ -300,13 +310,30 @@ function renderKnownPlayers() {
 
   list.innerHTML = "";
   available.forEach((k) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
+    const chip = document.createElement("span");
     chip.className = "known-chip";
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "known-chip-add";
     // Nota (média das 4 habilidades) só aparece no modo gerencial.
     const badge = isAdmin ? ` <span class="skill-badge">${overallSkill(k).toFixed(1)}</span>` : "";
-    chip.innerHTML = `${escapeHtml(k.name)}${badge}`;
-    chip.addEventListener("click", () => addKnownPlayerToEnv(k));
+    addBtn.innerHTML = `${escapeHtml(k.name)}${badge}`;
+    addBtn.addEventListener("click", () => addKnownPlayerToEnv(k));
+    chip.appendChild(addBtn);
+
+    // Só a diretoria (modo gerencial) pode apagar alguém da base de jogadores.
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "known-chip-remove admin-only";
+    delBtn.title = `Remover ${k.name} da base`;
+    delBtn.textContent = "✕";
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteKnownPlayer(k);
+    });
+    chip.appendChild(delBtn);
+
     list.appendChild(chip);
   });
 }
