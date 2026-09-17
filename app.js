@@ -382,7 +382,7 @@ async function onTogglePresent(player, present) {
   updateConfigSummary();
 }
 
-async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn) {
+async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn, presentCheckbox) {
   // Nada é salvo sozinho ao digitar/escolher — só quando este botão "Salvar" é
   // clicado (ou Enter no campo de nome). As estrelas podem ficar em branco e
   // ser preenchidas depois; uma estrela não escolhida mantém a nota atual do
@@ -403,7 +403,9 @@ async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn)
     skills[s.key] = v === "" ? (existingPlayer ? existingPlayer[s.key] : 0) : parseInt(v, 10);
   });
 
-  if (saveBtn) {
+  const present = presentCheckbox ? presentCheckbox.checked : true;
+  
+    if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.textContent = "Salvando…";
   }
@@ -411,7 +413,7 @@ async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn)
   if (existingPlayer) {
     const { error } = await supabaseClient
       .from("players")
-      .update({ name, ...skills })
+      .update({ name, present, ...skills })
       .eq("id", existingPlayer.id);
     if (error) {
       alert("Erro ao atualizar jogador: " + error.message);
@@ -421,7 +423,7 @@ async function handleRowChange(existingPlayer, nameInput, skillSelects, saveBtn)
   } else {
     const { error } = await supabaseClient
       .from("players")
-      .insert([{ environment: currentEnv, name, present: true, ...skills }]);
+      .insert([{ environment: currentEnv, name, present, ...skills }]);
     if (error) {
       alert("Erro ao adicionar jogador: " + error.message);
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "💾 Salvar"; }
@@ -474,16 +476,22 @@ function renderPlayers() {
     tr.appendChild(nameTd);
 
     // Presente
-    const presentTd = document.createElement("td");
-    presentTd.style.textAlign = "center";
-    if (p) {
-      const presentCheckbox = document.createElement("input");
-      presentCheckbox.type = "checkbox";
-      presentCheckbox.checked = p.present !== false;
-      presentCheckbox.addEventListener("change", () => onTogglePresent(p, presentCheckbox.checked));
-      presentTd.appendChild(presentCheckbox);
-    }
-    tr.appendChild(presentTd);
+const presentTd = document.createElement("td");
+        presentTd.style.textAlign = "center";
+        let presentCheckbox = null;
+        if (p) {
+                presentCheckbox = document.createElement("input");
+                presentCheckbox.type = "checkbox";
+                presentCheckbox.checked = p.present !== false;
+                presentCheckbox.addEventListener("change", () => onTogglePresent(p, presentCheckbox.checked));
+                presentTd.appendChild(presentCheckbox);
+        } else if (isAdmin) {
+                presentCheckbox = document.createElement("input");
+                presentCheckbox.type = "checkbox";
+                presentCheckbox.checked = true;
+                presentTd.appendChild(presentCheckbox);
+        }
+        tr.appendChild(presentTd);
 
     // Notas de habilidade — só entram no DOM se isAdmin, para não vazar o dado
     // na tela pra quem não tem a senha gerencial.
@@ -516,7 +524,7 @@ function renderPlayers() {
       saveBtn.type = "button";
       saveBtn.className = "btn-save-mini";
       saveBtn.textContent = "💾 Salvar";
-      saveBtn.addEventListener("click", () => handleRowChange(p, nameInput, skillSelects, saveBtn));
+      saveBtn.addEventListener("click", () => handleRowChange(p, nameInput, skillSelects, saveBtn, presentCheckbox));
       actionTd.appendChild(saveBtn);
 
       if (p) {
@@ -531,7 +539,7 @@ function renderPlayers() {
 
       // Enter no campo de nome também salva, sem precisar clicar no botão.
       nameInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleRowChange(p, nameInput, skillSelects, saveBtn);
+        if (e.key === "Enter") handleRowChange(p, nameInput, skillSelects, saveBtn, presentCheckbox);
       });
     }
 
@@ -703,3 +711,5 @@ function renderTeams() {
 
 // ---------- Init ----------
 document.addEventListener("DOMContentLoaded", initGate);
+
+https://drive.google.com/drive/folders/14HYGim8bd1MxWTP6dSxul-a1ECi2JBu4?usp=sharing
