@@ -11,3 +11,5 @@ const SUPABASE_ANON_KEY = "sb_publishable_-c5olXkJG0Bz1S6xjL7lgg_LiMD0DD5";
 // Troque por uma senha da sua escolha.
 const SHARED_PASSWORD = "volei2026";
 
+const ADMIN_PASSWORD = "voleidiretoria";
+
