@@ -10,6 +10,7 @@ create table if not exists players (
   skill_levantamento int not null default 0 check (skill_levantamento between 0 and 5),
   skill_recepcao int not null default 0 check (skill_recepcao between 0 and 5),
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
+  skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
   present boolean not null default true,
   created_at timestamptz default now()
 );
@@ -30,6 +31,7 @@ create table if not exists known_players (
   skill_levantamento int not null default 0 check (skill_levantamento between 0 and 5),
   skill_recepcao int not null default 0 check (skill_recepcao between 0 and 5),
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
+  skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
   updated_at timestamptz default now()
 );
 
@@ -103,6 +105,10 @@ begin
   if not exists (select 1 from information_schema.columns where table_name = 'players' and column_name = 'present') then
     alter table players add column present boolean not null default true;
   end if;
+
+if not exists (select 1 from information_schema.columns where table_name = 'players' and column_name = 'skill_ataque') then
+  alter table players add column skill_ataque int not null default 0 check (skill_ataque between 0 and 5);
+end if;
 end $$;
 
 do $$
@@ -131,4 +137,9 @@ begin
     alter table known_players add constraint known_players_skill_movimentacao_check check (skill_movimentacao between 0 and 5);
     alter table known_players drop column skill;
   end if;
+
+if not exists (select 1 from information_schema.columns where table_name = 'known_players' and column_name = 'skill_ataque') then
+  alter table known_players add column skill_ataque int not null default 0 check (skill_ataque between 0 and 5);
+end if;
+end $$;
 end $$;
