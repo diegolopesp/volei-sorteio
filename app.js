@@ -207,8 +207,35 @@ async function switchEnv(env) {
 
   teardownRealtime();
   await loadPlayers();
+  await syncKnownPlayersIntoEnv();
   await loadDraw();
   subscribeRealtime();
+}
+
+// Garante que todo jogador da base compartilhada (known_players) já tenha uma
+// linha na planilha do dia atual — assim ninguém precisa ser digitado de novo
+// nem readicionado clicando no chip amarelo toda semana. O jogador some no
+// "presente" (precisa ser confirmado marcando a caixinha) mas continua fixo
+// na planilha como participante do mensal, elegível pro sorteio assim que a
+// presença for marcada.
+async function syncKnownPlayersIntoEnv() {
+  if (!knownPlayers.length) return;
+  const currentNames = new Set(players.map((p) => p.name.trim().toLowerCase()));
+  const missing = knownPlayers.filter((k) => !currentNames.has(k.name.trim().toLowerCase()));
+  if (missing.length === 0) return;
+
+  const rows = missing.map((k) => {
+    const skills = {};
+    SKILLS.forEach((s) => { skills[s.key] = k[s.key] ?? 0; });
+    return { environment: currentEnv, name: k.name, present: false, ...skills };
+  });
+
+  const { error } = await supabaseClient.from("players").insert(rows);
+  if (error) {
+    console.error("Erro ao sincronizar jogadores da base:", error);
+    return;
+  }
+  await loadPlayers();
 }
 
 function teardownRealtime() {
@@ -360,7 +387,7 @@ async function loadPlayers() {
 }
 
 async function onDeletePlayer(id) {
-  if (!confirm("Remover este jogador?")) return;
+  if (!confirm("Remover este jogador da planilha de hoje? Como ele continua na base compartilhada, pode voltar a aparecer automaticamente na próxima vez que a página sincronizar. Para removê-lo de vez, use o ✕ no chip amarelo (base de jogadores).")) return;
   const { error } = await supabaseClient.from("players").delete().eq("id", id);
   if (error) {
     alert("Erro ao remover: " + error.message);
