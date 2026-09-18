@@ -441,7 +441,7 @@ function renderTableHead() {
   const thead = document.getElementById("players-thead");
   let cols = "<th>Nome</th><th>Presente</th>";
   if (isAdmin) {
-    SKILLS.forEach((s) => { cols += `<th>${s.label}</th>`; });
+    SKILLS.forEach((s) => { cols += `<th class="skill-th">${s.label}</th>`; });
     cols += "<th>Nota</th><th></th>";
   }
   thead.innerHTML = `<tr>${cols}</tr>`;
@@ -500,7 +500,9 @@ const presentTd = document.createElement("td");
       const skillSelects = {};
       SKILLS.forEach((s) => {
         const td = document.createElement("td");
+        td.className = "skill-td";
         const select = document.createElement("select");
+        select.className = "skill-select";
         const placeholderOpt = document.createElement("option");
         placeholderOpt.value = "";
         placeholderOpt.textContent = "—";
