@@ -15,12 +15,13 @@ const TEAM_COLORS = [
 
 const ENV_LABELS = { quarta: "Quarta", sexta: "Sexta" };
 
-// As 4 habilidades avaliadas, cada uma de 0 a 5 estrelas.
+// As 5 habilidades avaliadas, cada uma de 0 a 5 estrelas.
 const SKILLS = [
   { key: "skill_saque", label: "Saque" },
   { key: "skill_levantamento", label: "Levant." },
   { key: "skill_recepcao", label: "Recep." },
   { key: "skill_movimentacao", label: "Moviment." },
+  { key: "skill_ataque", label: "Ataque" },
 ];
 
 let supabaseClient = null;
