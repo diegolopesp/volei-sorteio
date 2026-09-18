@@ -442,7 +442,7 @@ function renderTableHead() {
   let cols = "<th>Nome</th><th>Presente</th>";
   if (isAdmin) {
     SKILLS.forEach((s) => { cols += `<th>${s.label}</th>`; });
-    cols += "<th></th>";
+    cols += "<th>Nota</th><th></th>";
   }
   thead.innerHTML = `<tr>${cols}</tr>`;
 }
@@ -518,6 +518,21 @@ const presentTd = document.createElement("td");
         skillSelects[s.key] = select;
       });
 
+// Nota - recalcula ao vivo conforme cada habilidade e escolhida (mesma conta de overallSkill: soma das estrelas / qtd habilidades, tratando "-" como 0).
+
+      const notaTd = document.createElement("td");
+      notaTd.className = "row-nota";
+      const notaSpan = document.createElement("span");
+      notaSpan.className = "row-nota-value";
+      const updateNota = () => {
+        const sum = SKILLS.reduce((acc, s) => acc + (Number(skillSelects[s.key].value) || 0), 0);
+        const media = sum / SKILLS.length;
+        notaSpan.textContent = `★ ${media.toFixed(2)}`;
+      };
+      SKILLS.forEach((s) => { skillSelects[s.key].addEventListener("change", updateNota); });
+      updateNota();
+      notaTd.appendChild(notaSpan);
+      tr.appendChild(notaTd);
       const actionTd = document.createElement("td");
       actionTd.className = "row-actions";
 
