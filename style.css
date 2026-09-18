@@ -103,6 +103,19 @@ input, select { font-family: inherit; }
   text-align: right;
   white-space: nowrap;
 }
+.row-nota {
+  text-align: center;
+  white-space: nowrap;
+}
+.row-nota-value {
+  display: inline-block;
+  background: var(--sea-green);
+  color: var(--white);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
 .btn-save-mini {
   background: var(--sea-green);
   color: var(--white);
