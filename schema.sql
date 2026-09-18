@@ -142,4 +142,3 @@ if not exists (select 1 from information_schema.columns where table_name = 'know
   alter table known_players add column skill_ataque int not null default 0 check (skill_ataque between 0 and 5);
 end if;
 end $$;
-end $$;
