@@ -35,9 +35,25 @@ create table if not exists known_players (
   updated_at timestamptz default now()
 );
 
+-- Histórico dos sorteios já realizados (um registro por dia+ambiente), usado
+-- para o calendário e para o sorteio "lembrar" quem já jogou junto e variar
+-- as duplas nas próximas vezes. Resortear no mesmo dia substitui o registro
+-- daquele dia (upsert por environment+draw_date) em vez de acumular ruído.
+create table if not exists draw_history (
+  environment text not null check (environment in ('quarta','sexta')),
+  draw_date date not null,
+  num_teams int not null,
+  teams jsonb not null,
+  updated_at timestamptz default now(),
+  primary key (environment, draw_date)
+);
+
+create index if not exists draw_history_env_date_idx on draw_history (environment, draw_date desc);
+
 alter table players enable row level security;
 alter table draws enable row level security;
 alter table known_players enable row level security;
+alter table draw_history enable row level security;
 
 -- Acesso liberado para o grupo pequeno e de confiança da diretoria.
 -- A proteção de acesso é feita pelas senhas compartilhadas na própria página (nível de UI,
@@ -67,11 +83,19 @@ create policy "public insert known_players" on known_players for insert with che
 create policy "public update known_players" on known_players for update using (true);
 create policy "public delete known_players" on known_players for delete using (true);
 
+drop policy if exists "public read draw_history" on draw_history;
+drop policy if exists "public insert draw_history" on draw_history;
+drop policy if exists "public update draw_history" on draw_history;
+create policy "public read draw_history" on draw_history for select using (true);
+create policy "public insert draw_history" on draw_history for insert with check (true);
+create policy "public update draw_history" on draw_history for update using (true);
+
 -- Tempo real (necessário além das policies acima; sem isso os 3 diretores não veem
 -- as mudanças uns dos outros ao vivo).
 alter publication supabase_realtime add table players;
 alter publication supabase_realtime add table draws;
 alter publication supabase_realtime add table known_players;
+alter publication supabase_realtime add table draw_history;
 
 -- ================= MIGRAÇÃO (projeto já existia com o schema antigo, nota única) =================
 -- Bloco idempotente: só mexe em algo se a coluna antiga "skill" ainda existir.

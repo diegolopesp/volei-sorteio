@@ -36,6 +36,20 @@ let knownPlayers = []; // shared directory of every player ever added, across bo
 let knownPlayersChannel = null;
 let isAdmin = false; // unlocked with ADMIN_PASSWORD — controls visibility of skill notes
 
+// Quantos sorteios recentes (por ambiente) entram na conta de "quem já jogou
+// com quem", usada para variar as duplas do próximo sorteio.
+const HISTORY_LOOKBACK = 6;
+
+let calendarMonth = new Date(); // mês (dia 1) atualmente exibido no calendário
+let calendarHistory = {}; // { "YYYY-MM-DD": { quarta: row|undefined, sexta: row|undefined } }
+let selectedCalendarDate = null;
+let drawHistoryChannel = null;
+
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
 // Média das 4 habilidades — usada para balancear os times. Só é exibida na UI
 // quando isAdmin é true (o objeto do jogador continua tendo os valores porque
 // o dado chega do Supabase para qualquer usuário logado; o que fica restrito
@@ -133,8 +147,13 @@ function startApp() {
   document.getElementById("btn-shuffle").addEventListener("click", onShuffle);
   document.getElementById("btn-clear-draw").addEventListener("click", onClearDraw);
 
+  document.getElementById("cal-prev").addEventListener("click", () => changeCalendarMonth(-1));
+  document.getElementById("cal-next").addEventListener("click", () => changeCalendarMonth(1));
+
   loadKnownPlayers();
   subscribeKnownPlayersRealtime();
+  loadCalendarMonth();
+  subscribeDrawHistoryRealtime();
 
   switchEnv("quarta");
 }
@@ -158,6 +177,7 @@ function tryAdminLogin() {
     renderPlayers();
     renderKnownPlayers();
     renderTeams();
+    if (selectedCalendarDate) renderCalendarDetail(selectedCalendarDate);
   } else {
     err.textContent = "Senha gerencial incorreta.";
   }
@@ -170,6 +190,7 @@ function adminLogout() {
   renderPlayers();
   renderKnownPlayers();
   renderTeams();
+  if (selectedCalendarDate) renderCalendarDetail(selectedCalendarDate);
 }
 
 function updateAdminUI() {
@@ -639,26 +660,102 @@ async function loadDraw() {
   renderTeams();
 }
 
-function balanceTeams(playerList, numTeams) {
-  // Embaralha primeiro para que, com jogadores de nota igual (ou empatada no
-  // arredondamento), o resultado mude a cada clique em "Sortear" — sort() do
-  // JS é estável, então o empate entre iguais mantém a ordem embaralhada em
-  // vez de sempre cair na mesma sequência.
+// Chave estável para um par de jogadores (não depende da ordem dos ids).
+function pairKey(idA, idB) {
+  return idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
+}
+
+// Monta um mapa "par de jogadores" -> "quantas vezes (ponderado por recência)
+// jogaram juntos" a partir dos últimos sorteios daquele ambiente. Sorteios
+// mais recentes pesam mais, para o algoritmo priorizar desfazer as duplas
+// mais "cansadas" primeiro.
+function buildPairWeights(historyRows) {
+  const weights = new Map();
+  historyRows.forEach((row, idx) => {
+    const recencyWeight = historyRows.length - idx; // 0 = mais recente, pesa mais
+    (row.teams || []).forEach((team) => {
+      const ids = (team.players || []).map((p) => p.id).filter(Boolean);
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const key = pairKey(ids[i], ids[j]);
+          weights.set(key, (weights.get(key) || 0) + recencyWeight);
+        }
+      }
+    });
+  });
+  return weights;
+}
+
+async function loadRecentDrawHistory(environment, limit) {
+  const { data, error } = await supabaseClient
+    .from("draw_history")
+    .select("teams, draw_date")
+    .eq("environment", environment)
+    .order("draw_date", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error("Erro ao carregar histórico de sorteios:", error);
+    return [];
+  }
+  return data || [];
+}
+
+// Distribui os jogadores presentes em `numTeams` times equilibrados.
+// Três critérios, do mais para o menos importante:
+//   1. Nota geral — a diferença entre o time mais forte e o mais fraco fica
+//      a menor possível (mesma lógica de antes).
+//   2. Habilidades específicas — evita empilhar num só time os especialistas
+//      de uma mesma habilidade (ex.: 2 ótimos atacantes de um lado e nenhum
+//      do outro), espalhando quem se destaca em cada habilidade.
+//   3. Histórico recente (pairWeights) — entre times igualmente equilibrados,
+//      prioriza separar duplas que já jogaram muito juntas ultimamente.
+function balanceTeams(playerList, numTeams, pairWeights = new Map()) {
+  // Embaralha primeiro para que, com jogadores empatados nos critérios acima,
+  // o resultado mude a cada clique em "Sortear" em vez de cair sempre na
+  // mesma sequência.
   const shuffled = shuffleArray(playerList);
-  const sorted = shuffled.sort((a, b) => overallSkill(b) - overallSkill(a));
-  const baseSize = Math.floor(sorted.length / numTeams);
-  const remainder = sorted.length % numTeams;
+
+  // Ordena por "pico de especialidade": quem tem a habilidade isolada mais
+  // alta entra primeiro na distribuição, para ser espalhado entre os times
+  // antes que as vagas fiquem escassas.
+  const withPeak = shuffled.map((player) => {
+    let peakSkill = SKILLS[0].key;
+    let peakValue = -1;
+    SKILLS.forEach((s) => {
+      const v = Number(player[s.key]) || 0;
+      if (v > peakValue) {
+        peakValue = v;
+        peakSkill = s.key;
+      }
+    });
+    return { player, peakSkill, peakValue };
+  });
+  withPeak.sort((a, b) => b.peakValue - a.peakValue || overallSkill(b.player) - overallSkill(a.player));
+
+  const baseSize = Math.floor(shuffled.length / numTeams);
+  const remainder = shuffled.length % numTeams;
   const capacities = Array.from({ length: numTeams }, (_, i) => baseSize + (i < remainder ? 1 : 0));
 
-  const teams = Array.from({ length: numTeams }, () => ({ players: [], total: 0 }));
+  const teams = Array.from({ length: numTeams }, () => ({
+    players: [],
+    total: 0,
+    skillTotals: Object.fromEntries(SKILLS.map((s) => [s.key, 0])),
+  }));
 
-  sorted.forEach((player) => {
+  withPeak.forEach(({ player, peakSkill }) => {
     let bestIdx = -1;
-    let bestTotal = Infinity;
+    let bestCost = Infinity;
     teams.forEach((team, idx) => {
       if (team.players.length >= capacities[idx]) return;
-      if (team.total < bestTotal) {
-        bestTotal = team.total;
+      const balanceCost = team.total; // prioridade 1: time mais fraco recebe o próximo
+      const specialtyCost = team.skillTotals[peakSkill]; // prioridade 2: espalha especialistas
+      const repeatCost = team.players.reduce(
+        (acc, tp) => acc + (pairWeights.get(pairKey(tp.id, player.id)) || 0),
+        0
+      ); // prioridade 3: evita repetir duplas recentes
+      const cost = balanceCost * 3 + specialtyCost * 1.5 + repeatCost * 1 + Math.random() * 0.05;
+      if (cost < bestCost) {
+        bestCost = cost;
         bestIdx = idx;
       }
     });
@@ -668,6 +765,9 @@ function balanceTeams(playerList, numTeams) {
     }
     teams[bestIdx].players.push(player);
     teams[bestIdx].total += overallSkill(player);
+    SKILLS.forEach((s) => {
+      teams[bestIdx].skillTotals[s.key] += Number(player[s.key]) || 0;
+    });
   });
 
   return teams.map((t, idx) => ({
@@ -678,6 +778,14 @@ function balanceTeams(playerList, numTeams) {
   }));
 }
 
+function todayLocalDateStr() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 async function onShuffle() {
   const numTeams = parseInt(document.getElementById("num-teams").value, 10) || 2;
   const presentPlayers = players.filter((p) => p.present !== false);
@@ -686,17 +794,21 @@ async function onShuffle() {
     return;
   }
 
-  const teams = balanceTeams(presentPlayers, numTeams);
+  const recentHistory = await loadRecentDrawHistory(currentEnv, HISTORY_LOOKBACK);
+  const pairWeights = buildPairWeights(recentHistory);
+
+  const teams = balanceTeams(presentPlayers, numTeams, pairWeights);
+  const teamsJson = teams.map((t) => ({
+    colorName: t.color.name,
+    colorHex: t.color.hex,
+    players: t.players.map((p) => ({ id: p.id, name: p.name, skill: overallSkill(p) })),
+    total: t.total,
+    avg: t.avg,
+  }));
   const payload = {
     environment: currentEnv,
     num_teams: numTeams,
-    teams: teams.map((t) => ({
-      colorName: t.color.name,
-      colorHex: t.color.hex,
-      players: t.players.map((p) => ({ id: p.id, name: p.name, skill: overallSkill(p) })),
-      total: t.total,
-      avg: t.avg,
-    })),
+    teams: teamsJson,
     updated_at: new Date().toISOString(),
   };
 
@@ -707,6 +819,24 @@ async function onShuffle() {
   }
   currentDraw = payload;
   renderTeams();
+
+  // Guarda no histórico (para o calendário e para os próximos sorteios
+  // saberem quem já jogou junto). Resortear no mesmo dia substitui o
+  // registro daquele dia em vez de acumular — não é crítico para o sorteio
+  // em si, então uma falha aqui só vai pro console, sem travar a tela.
+  const drawDate = todayLocalDateStr();
+  const { error: histError } = await supabaseClient.from("draw_history").upsert(
+    { environment: currentEnv, draw_date: drawDate, num_teams: numTeams, teams: teamsJson, updated_at: new Date().toISOString() },
+    { onConflict: "environment,draw_date" }
+  );
+  if (histError) {
+    console.error("Erro ao salvar histórico do sorteio:", histError);
+  } else if (
+    calendarMonth.getFullYear() === new Date().getFullYear() &&
+    calendarMonth.getMonth() === new Date().getMonth()
+  ) {
+    loadCalendarMonth();
+  }
 }
 
 async function onClearDraw() {
@@ -751,6 +881,144 @@ function renderTeams() {
       <div class="team-card-body">${playersHtml}</div>
     `;
     grid.appendChild(card);
+  });
+}
+
+// ---------- Calendar (histórico de sorteios por mês) ----------
+function subscribeDrawHistoryRealtime() {
+  drawHistoryChannel = supabaseClient
+    .channel("draw-history")
+    .on("postgres_changes", { event: "*", schema: "public", table: "draw_history" }, () => loadCalendarMonth())
+    .subscribe();
+}
+
+function changeCalendarMonth(delta) {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1);
+  selectedCalendarDate = null;
+  document.getElementById("calendar-detail").classList.add("hidden");
+  loadCalendarMonth();
+}
+
+async function loadCalendarMonth() {
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstDay = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const lastDay = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDate).padStart(2, "0")}`;
+
+  const { data, error } = await supabaseClient
+    .from("draw_history")
+    .select("*")
+    .gte("draw_date", firstDay)
+    .lte("draw_date", lastDay);
+
+  calendarHistory = {};
+  if (error) {
+    console.error("Erro ao carregar calendário de sorteios:", error);
+  } else {
+    (data || []).forEach((row) => {
+      if (!calendarHistory[row.draw_date]) calendarHistory[row.draw_date] = {};
+      calendarHistory[row.draw_date][row.environment] = row;
+    });
+  }
+  renderCalendar();
+  if (selectedCalendarDate) renderCalendarDetail(selectedCalendarDate);
+}
+
+function renderCalendar() {
+  document.getElementById("cal-month-label").textContent =
+    `${MONTH_NAMES[calendarMonth.getMonth()]} ${calendarMonth.getFullYear()}`;
+
+  const grid = document.getElementById("calendar-grid");
+  grid.innerHTML = "";
+
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < firstWeekday; i++) {
+    const empty = document.createElement("div");
+    empty.className = "calendar-day empty";
+    grid.appendChild(empty);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayData = calendarHistory[dateStr];
+
+    const cell = document.createElement("div");
+    cell.className = "calendar-day";
+    if (dayData) cell.classList.add("has-draw");
+    if (dateStr === selectedCalendarDate) cell.classList.add("selected");
+
+    const num = document.createElement("span");
+    num.textContent = String(day);
+    cell.appendChild(num);
+
+    if (dayData) {
+      const badges = document.createElement("span");
+      badges.className = "calendar-day-badges";
+      badges.textContent = `${dayData.quarta ? "🌅" : ""}${dayData.sexta ? "🌇" : ""}`;
+      cell.appendChild(badges);
+      cell.addEventListener("click", () => {
+        selectedCalendarDate = dateStr;
+        renderCalendar();
+        renderCalendarDetail(dateStr);
+      });
+    }
+
+    grid.appendChild(cell);
+  }
+}
+
+function formatDatePt(dateStr) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function renderCalendarDetail(dateStr) {
+  const detail = document.getElementById("calendar-detail");
+  const dayData = calendarHistory[dateStr];
+  if (!dayData) {
+    detail.classList.add("hidden");
+    return;
+  }
+  detail.classList.remove("hidden");
+  detail.innerHTML = "";
+
+  ["quarta", "sexta"].forEach((env) => {
+    const row = dayData[env];
+    if (!row) return;
+
+    const block = document.createElement("div");
+    block.className = "calendar-detail-env";
+
+    const title = document.createElement("h3");
+    title.textContent = `${env === "quarta" ? "🌅" : "🌇"} ${ENV_LABELS[env]} — ${formatDatePt(dateStr)}`;
+    block.appendChild(title);
+
+    const teamsGrid = document.createElement("div");
+    teamsGrid.className = "calendar-detail-teams";
+    (row.teams || []).forEach((team) => {
+      const card = document.createElement("div");
+      card.className = "team-card";
+      card.style.setProperty("--team-color", team.colorHex);
+      const playersHtml = (team.players || [])
+        .map((p) => `<div class="team-player-row"><span>${escapeHtml(p.name)}</span></div>`)
+        .join("");
+      const avgHtml = isAdmin ? `<span class="team-avg">★ ${Number(team.avg || 0).toFixed(2)}</span>` : "";
+      card.innerHTML = `
+        <div class="team-card-header">
+          <span>${team.colorName}</span>
+          ${avgHtml}
+        </div>
+        <div class="team-card-body">${playersHtml}</div>
+      `;
+      teamsGrid.appendChild(card);
+    });
+    block.appendChild(teamsGrid);
+    detail.appendChild(block);
   });
 }
 

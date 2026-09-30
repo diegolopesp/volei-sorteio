@@ -79,7 +79,7 @@
         <button id="btn-shuffle" class="btn btn-shuffle">🔀 Sortear Times</button>
         <button id="btn-clear-draw" class="btn btn-ghost">↺ Limpar Sorteio</button>
       </div>
-      <p class="hint">O sorteio equilibra os times pela nota de habilidade — a diferença entre o time mais forte e o mais fraco fica a menor possível.</p>
+      <p class="hint">O sorteio equilibra os times pela nota geral e por habilidade (saque, ataque, recepção...), evitando concentrar os especialistas de uma mesma habilidade num só time, e varia as duplas que já jogaram juntas recentemente.</p>
     </section>
 
     <section class="panel teams-panel hidden" id="teams-panel">
@@ -88,6 +88,23 @@
         <p class="subtitle">Fica visível para todos até o próximo sorteio ser feito.</p>
       </div>
       <div class="teams-grid" id="teams-grid"></div>
+    </section>
+
+    <section class="panel calendar-panel">
+      <div class="panel-header">
+        <h2>📅 Calendário de Sorteios</h2>
+        <p class="subtitle">Veja os times que já jogaram juntos em cada mês, tanto na Quarta quanto na Sexta.</p>
+      </div>
+      <div class="calendar-nav">
+        <button id="cal-prev" class="btn btn-ghost btn-mini" type="button">◀</button>
+        <span id="cal-month-label" class="calendar-month-label"></span>
+        <button id="cal-next" class="btn btn-ghost btn-mini" type="button">▶</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+      <div id="calendar-detail" class="calendar-detail hidden"></div>
     </section>
 
     <section class="panel players-panel">
