@@ -489,32 +489,37 @@ body:not(.is-admin) .admin-only { display: none !important; }
 }
 .team-player-row:last-child { border-bottom: none; }
 
-/* ---------- Calendar panel ---------- */
+/* ---------- Calendar panel (compacto, só no modo gerencial) ---------- */
+.calendar-panel {
+  max-width: 320px;
+  margin: 0 auto;
+}
 .calendar-nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
+.calendar-nav .btn-mini { padding: 4px 10px; font-size: 11px; }
 .calendar-month-label {
   font-family: 'Baloo 2', sans-serif;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 13px;
   color: var(--sea-green);
-  min-width: 170px;
+  min-width: 110px;
   text-align: center;
   text-transform: capitalize;
 }
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: 3px;
+  margin-bottom: 4px;
 }
 .calendar-weekdays span {
   text-align: center;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.03em;
   color: var(--ink-soft);
@@ -523,22 +528,22 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 3px;
 }
 .calendar-day {
   aspect-ratio: 1;
-  border-radius: 10px;
-  border: 2px solid #eee0bd;
+  border-radius: 6px;
+  border: 1px solid #eee0bd;
   background: var(--sand-light);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 0;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 10px;
   color: var(--ink);
-  padding: 2px;
+  padding: 1px;
 }
 .calendar-day.empty { visibility: hidden; }
 .calendar-day.has-draw {
@@ -547,38 +552,38 @@ body:not(.is-admin) .admin-only { display: none !important; }
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .calendar-day.has-draw:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(18, 144, 122, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(18, 144, 122, 0.25);
 }
 .calendar-day.selected {
   background: var(--sea-green);
   color: var(--white);
   border-color: var(--sea-green);
 }
-.calendar-day-badges { font-size: 11px; line-height: 1; }
+.calendar-day-badges { font-size: 8px; line-height: 1; }
 .calendar-detail {
-  margin-top: 18px;
+  margin-top: 14px;
   border-top: 2px dashed #eee0bd;
-  padding-top: 16px;
+  padding-top: 12px;
 }
-.calendar-detail-env { margin-bottom: 18px; }
+.calendar-detail-env { margin-bottom: 14px; }
 .calendar-detail-env:last-child { margin-bottom: 0; }
 .calendar-detail-env h3 {
   font-family: 'Baloo 2', sans-serif;
-  font-size: 15px;
-  margin: 0 0 8px;
+  font-size: 13px;
+  margin: 0 0 6px;
   color: var(--ink);
 }
 .calendar-detail-teams {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 .calendar-empty-hint {
   text-align: center;
   color: var(--ink-soft);
-  font-size: 13px;
-  padding: 8px 0 0;
+  font-size: 12px;
+  padding: 6px 0 0;
 }
 
 .config-warning {

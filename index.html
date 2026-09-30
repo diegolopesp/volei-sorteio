@@ -90,23 +90,6 @@
       <div class="teams-grid" id="teams-grid"></div>
     </section>
 
-    <section class="panel calendar-panel">
-      <div class="panel-header">
-        <h2>📅 Calendário de Sorteios</h2>
-        <p class="subtitle">Veja os times que já jogaram juntos em cada mês, tanto na Quarta quanto na Sexta.</p>
-      </div>
-      <div class="calendar-nav">
-        <button id="cal-prev" class="btn btn-ghost btn-mini" type="button">◀</button>
-        <span id="cal-month-label" class="calendar-month-label"></span>
-        <button id="cal-next" class="btn btn-ghost btn-mini" type="button">▶</button>
-      </div>
-      <div class="calendar-weekdays">
-        <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
-      </div>
-      <div id="calendar-grid" class="calendar-grid"></div>
-      <div id="calendar-detail" class="calendar-detail hidden"></div>
-    </section>
-
     <section class="panel players-panel">
       <div class="panel-header">
         <h2>Jogadores — <span id="env-label-players">Quarta</span></h2>
@@ -129,6 +112,23 @@
       <div class="action-row">
         <button id="btn-add-row" class="btn btn-ghost admin-only hidden">+ Adicionar linha</button>
       </div>
+    </section>
+
+    <section class="panel calendar-panel admin-only">
+      <div class="panel-header">
+        <h2>📅 Calendário de Sorteios</h2>
+        <p class="subtitle">Times que já jogaram juntos em cada mês, na Quarta e na Sexta.</p>
+      </div>
+      <div class="calendar-nav">
+        <button id="cal-prev" class="btn btn-ghost btn-mini" type="button">◀</button>
+        <span id="cal-month-label" class="calendar-month-label"></span>
+        <button id="cal-next" class="btn btn-ghost btn-mini" type="button">▶</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+      <div id="calendar-detail" class="calendar-detail hidden"></div>
     </section>
 
   </main>
