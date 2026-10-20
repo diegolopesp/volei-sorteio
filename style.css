@@ -141,7 +141,7 @@ input, select { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px 8px;
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px; }
@@ -186,7 +186,7 @@ input, select { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px 12px;
   flex-wrap: wrap;
@@ -207,7 +207,7 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .day-tabs {
   display: flex;
   gap: 8px;
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px 16px;
 }
@@ -226,7 +226,7 @@ body:not(.is-admin) .admin-only { display: none !important; }
 
 .main {
   flex: 1;
-  max-width: 1000px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
   padding: 24px;
@@ -358,11 +358,11 @@ body:not(.is-admin) .admin-only { display: none !important; }
    compacta o bastante pra caber Nome + Presente + 5 habilidades + Nota + Salvar
    numa tela só, sem rolagem horizontal. */
 .skill-th, .skill-td {
-  min-width: 84px;
+  min-width: 96px;
   white-space: nowrap;
 }
 .skill-select {
-  min-width: 78px;
+  min-width: 90px;
   font-size: 12px;
   letter-spacing: normal;
   padding: 7px 3px;

@@ -155,7 +155,8 @@ function startApp() {
   loadCalendarMonth();
   subscribeDrawHistoryRealtime();
 
-  switchEnv("quarta");
+  // Abre direto na aba do dia: sexta-feira → Sexta; qualquer outro dia → Quarta.
+  switchEnv(new Date().getDay() === 5 ? "sexta" : "quarta");
 }
 
 // ---------- Admin gate (senha gerencial — controla quem vê as notas) ----------
@@ -401,7 +402,9 @@ async function loadPlayers() {
     return;
   }
   setConnStatus("online");
-  players = data || [];
+  players = (data || []).sort(
+    (a, b) => overallSkill(b) - overallSkill(a) || a.name.localeCompare(b.name, "pt-BR")
+  );
   renderPlayers();
   renderKnownPlayers();
   updateConfigSummary();
@@ -490,7 +493,7 @@ function renderTableHead() {
   let cols = "<th>Nome</th><th>Presente</th>";
   if (isAdmin) {
     SKILLS.forEach((s) => { cols += `<th class="skill-th">${s.label}</th>`; });
-    cols += "<th>Nota</th><th></th>";
+    cols += "<th>Nota média</th><th>Nota total</th><th></th>";
   }
   thead.innerHTML = `<tr>${cols}</tr>`;
 }
@@ -574,15 +577,21 @@ const presentTd = document.createElement("td");
       notaTd.className = "row-nota";
       const notaSpan = document.createElement("span");
       notaSpan.className = "row-nota-value";
+      const totalTd = document.createElement("td");
+      totalTd.className = "row-nota";
+      const totalSpan = document.createElement("span");
+      totalSpan.className = "row-nota-value";
       const updateNota = () => {
         const sum = SKILLS.reduce((acc, s) => acc + (Number(skillSelects[s.key].value) || 0), 0);
-        const media = sum / SKILLS.length;
-        notaSpan.textContent = `★ ${media.toFixed(2)}`;
+        notaSpan.textContent = `★ ${(sum / SKILLS.length).toFixed(2)}`;
+        totalSpan.textContent = `★ ${sum}`;
       };
       SKILLS.forEach((s) => { skillSelects[s.key].addEventListener("change", updateNota); });
       updateNota();
       notaTd.appendChild(notaSpan);
       tr.appendChild(notaTd);
+      totalTd.appendChild(totalSpan);
+      tr.appendChild(totalTd);
       const actionTd = document.createElement("td");
       actionTd.className = "row-actions";
 
@@ -654,7 +663,9 @@ async function loadDraw() {
     currentDraw = data;
     document.getElementById("num-teams").value = data.num_teams;
   } else {
+    // Sem sorteio neste dia: não herda o nº de times da outra aba.
     currentDraw = null;
+    document.getElementById("num-teams").value = 2;
   }
   updateConfigSummary();
   renderTeams();
