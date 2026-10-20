@@ -13,7 +13,19 @@ const TEAM_COLORS = [
   { name: "Cinza", hex: "#607d8b" },
 ];
 
-const ENV_LABELS = { quarta: "Quarta", sexta: "Sexta" };
+const ENV_LABELS = { quarta: "Quarta", sexta: "Sexta", quarta_teste: "Quarta Teste" };
+const ENV_EMOJI = { quarta: "🌅", sexta: "🌇", quarta_teste: "🧪" };
+const ENV_ORDER = ["quarta", "sexta", "quarta_teste"];
+
+// Abas que usam o "novo modelo": sorteio por otimização (logic.js) e registro de
+// jogos com fila de rotação. streakLimit = vitórias seguidas até o time sair;
+// historyEnvs = de quais abas vem o histórico de duplas que já jogaram juntas.
+const NEW_MODEL_ENVS = {
+  quarta_teste: { streakLimit: 3, historyEnvs: ["quarta_teste", "quarta"] },
+};
+function isNewModel(env) {
+  return Boolean(NEW_MODEL_ENVS[env]);
+}
 
 // As 5 habilidades avaliadas, cada uma de 0 a 5 estrelas.
 const SKILLS = [
@@ -39,6 +51,12 @@ let isAdmin = false; // unlocked with ADMIN_PASSWORD — controls visibility of 
 // Quantos sorteios recentes (por ambiente) entram na conta de "quem já jogou
 // com quem", usada para variar as duplas do próximo sorteio.
 const HISTORY_LOOKBACK = 6;
+
+// Registro de jogos (novo modelo): todos os jogos da aba atual e o histórico de
+// sorteios da aba (para saber quem estava em cada time em cada noite).
+let envGames = [];
+let envHistoryRows = [];
+let gamesChannel = null;
 
 let calendarMonth = new Date(); // mês (dia 1) atualmente exibido no calendário
 let calendarHistory = {}; // { "YYYY-MM-DD": { quarta: row|undefined, sexta: row|undefined } }
@@ -146,6 +164,7 @@ function startApp() {
   document.getElementById("num-teams").addEventListener("change", onNumTeamsChange);
   document.getElementById("btn-shuffle").addEventListener("click", onShuffle);
   document.getElementById("btn-clear-draw").addEventListener("click", onClearDraw);
+  document.getElementById("btn-undo-game").addEventListener("click", onUndoGame);
 
   document.getElementById("cal-prev").addEventListener("click", () => changeCalendarMonth(-1));
   document.getElementById("cal-next").addEventListener("click", () => changeCalendarMonth(1));
@@ -178,6 +197,7 @@ function tryAdminLogin() {
     renderPlayers();
     renderKnownPlayers();
     renderTeams();
+    renderGames();
     if (selectedCalendarDate) renderCalendarDetail(selectedCalendarDate);
   } else {
     err.textContent = "Senha gerencial incorreta.";
@@ -191,6 +211,7 @@ function adminLogout() {
   renderPlayers();
   renderKnownPlayers();
   renderTeams();
+  renderGames();
   if (selectedCalendarDate) renderCalendarDetail(selectedCalendarDate);
 }
 
@@ -226,11 +247,17 @@ async function switchEnv(env) {
   document.getElementById("env-subtitle").textContent = `Monte os times de ${ENV_LABELS[env]} em segundos`;
   document.getElementById("env-label-players").textContent = ENV_LABELS[env];
   document.getElementById("env-label-teams").textContent = ENV_LABELS[env];
+  document.getElementById("hint-text").textContent = isNewModel(env)
+    ? "Novo modelo: o sorteio testa centenas de combinações e fica com a de soma de estrelas mais equilibrada, com um levantador decente em cada time, habilidades espalhadas e duplas variadas. A ordem dos times na lista é a ordem de entrada nos jogos."
+    : "O sorteio equilibra os times pela nota geral e por habilidade (saque, ataque, recepção...), evitando concentrar os especialistas de uma mesma habilidade num só time, e varia as duplas que já jogaram juntas recentemente.";
 
   teardownRealtime();
+  envGames = [];
+  envHistoryRows = [];
   await loadPlayers();
   await syncKnownPlayersIntoEnv();
   await loadDraw();
+  await loadGamesData();
   subscribeRealtime();
 }
 
@@ -263,8 +290,10 @@ async function syncKnownPlayersIntoEnv() {
 function teardownRealtime() {
   if (playersChannel) supabaseClient.removeChannel(playersChannel);
   if (drawsChannel) supabaseClient.removeChannel(drawsChannel);
+  if (gamesChannel) supabaseClient.removeChannel(gamesChannel);
   playersChannel = null;
   drawsChannel = null;
+  gamesChannel = null;
 }
 
 function subscribeRealtime() {
@@ -285,6 +314,17 @@ function subscribeRealtime() {
       () => loadDraw()
     )
     .subscribe();
+
+  if (isNewModel(currentEnv)) {
+    gamesChannel = supabaseClient
+      .channel(`games-${currentEnv}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "games", filter: `environment=eq.${currentEnv}` },
+        () => loadGamesData()
+      )
+      .subscribe();
+  }
 }
 
 // ---------- Known players (shared directory, reused across Quarta/Sexta) ----------
@@ -669,23 +709,20 @@ async function loadDraw() {
   }
   updateConfigSummary();
   renderTeams();
-}
-
-// Chave estável para um par de jogadores (não depende da ordem dos ids).
-function pairKey(idA, idB) {
-  return idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
+  renderGames();
 }
 
 // Monta um mapa "par de jogadores" -> "quantas vezes (ponderado por recência)
 // jogaram juntos" a partir dos últimos sorteios daquele ambiente. Sorteios
 // mais recentes pesam mais, para o algoritmo priorizar desfazer as duplas
-// mais "cansadas" primeiro.
-function buildPairWeights(historyRows) {
+// mais "cansadas" primeiro. `keyOf` escolhe como identificar o jogador (id por
+// padrão; nome quando o histórico vem de abas com linhas de jogador diferentes).
+function buildPairWeights(historyRows, keyOf = (p) => p.id) {
   const weights = new Map();
   historyRows.forEach((row, idx) => {
     const recencyWeight = historyRows.length - idx; // 0 = mais recente, pesa mais
     (row.teams || []).forEach((team) => {
-      const ids = (team.players || []).map((p) => p.id).filter(Boolean);
+      const ids = (team.players || []).map(keyOf).filter(Boolean);
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           const key = pairKey(ids[i], ids[j]);
@@ -789,12 +826,15 @@ function balanceTeams(playerList, numTeams, pairWeights = new Map()) {
   }));
 }
 
-function todayLocalDateStr() {
-  const d = new Date();
+function localDateStr(d) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayLocalDateStr() {
+  return localDateStr(new Date());
 }
 
 async function onShuffle() {
@@ -805,16 +845,34 @@ async function onShuffle() {
     return;
   }
 
-  const recentHistory = await loadRecentDrawHistory(currentEnv, HISTORY_LOOKBACK);
-  const pairWeights = buildPairWeights(recentHistory);
+  const newModel = isNewModel(currentEnv);
+  const drawDate = todayLocalDateStr();
 
-  const teams = balanceTeams(presentPlayers, numTeams, pairWeights);
+  // Novo modelo: sortear de novo no mesmo dia troca os times, então os jogos já
+  // registrados hoje deixariam de fazer sentido — pede confirmação e apaga.
+  let gamesToDelete = false;
+  if (newModel) {
+    const todayGames = envGames.filter((g) => g.draw_date === drawDate);
+    if (todayGames.length > 0) {
+      if (!confirm(`Já existem ${todayGames.length} jogo(s) registrado(s) hoje. Sortear de novo apaga esses jogos. Continuar?`)) return;
+      gamesToDelete = true;
+    }
+  }
+
+  let teams;
+  if (newModel) {
+    teams = await buildTeamsNewModel(presentPlayers, numTeams);
+  } else {
+    const recentHistory = await loadRecentDrawHistory(currentEnv, HISTORY_LOOKBACK);
+    teams = balanceTeams(presentPlayers, numTeams, buildPairWeights(recentHistory));
+  }
   const teamsJson = teams.map((t) => ({
     colorName: t.color.name,
     colorHex: t.color.hex,
     players: t.players.map((p) => ({ id: p.id, name: p.name, skill: overallSkill(p) })),
     total: t.total,
     avg: t.avg,
+    sum: t.players.reduce((acc, p) => acc + skillTotal(p, SKILLS), 0),
   }));
   const payload = {
     environment: currentEnv,
@@ -829,25 +887,63 @@ async function onShuffle() {
     return;
   }
   currentDraw = payload;
+  if (gamesToDelete) {
+    const { error: delError } = await supabaseClient
+      .from("games")
+      .delete()
+      .eq("environment", currentEnv)
+      .eq("draw_date", drawDate);
+    if (delError) console.error("Erro ao apagar jogos do dia:", delError);
+    envGames = envGames.filter((g) => g.draw_date !== drawDate);
+  }
   renderTeams();
+  renderGames();
 
   // Guarda no histórico (para o calendário e para os próximos sorteios
   // saberem quem já jogou junto). Resortear no mesmo dia substitui o
   // registro daquele dia em vez de acumular — não é crítico para o sorteio
   // em si, então uma falha aqui só vai pro console, sem travar a tela.
-  const drawDate = todayLocalDateStr();
   const { error: histError } = await supabaseClient.from("draw_history").upsert(
     { environment: currentEnv, draw_date: drawDate, num_teams: numTeams, teams: teamsJson, updated_at: new Date().toISOString() },
     { onConflict: "environment,draw_date" }
   );
   if (histError) {
     console.error("Erro ao salvar histórico do sorteio:", histError);
-  } else if (
-    calendarMonth.getFullYear() === new Date().getFullYear() &&
-    calendarMonth.getMonth() === new Date().getMonth()
-  ) {
-    loadCalendarMonth();
+  } else {
+    if (newModel) await loadGamesData();
+    if (
+      calendarMonth.getFullYear() === new Date().getFullYear() &&
+      calendarMonth.getMonth() === new Date().getMonth()
+    ) {
+      loadCalendarMonth();
+    }
   }
+}
+
+// Sorteio do novo modelo (logic.js). O histórico de duplas vem da própria aba e
+// da Quarta (as linhas de jogador são diferentes em cada aba, então a
+// identificação é pelo nome).
+async function buildTeamsNewModel(presentPlayers, numTeams) {
+  const nameKey = (p) => String(p.name).trim().toLowerCase();
+  const lists = await Promise.all(
+    NEW_MODEL_ENVS[currentEnv].historyEnvs.map((e) => loadRecentDrawHistory(e, HISTORY_LOOKBACK))
+  );
+  const recentHistory = lists
+    .flat()
+    .sort((a, b) => (a.draw_date < b.draw_date ? 1 : -1))
+    .slice(0, HISTORY_LOOKBACK);
+  const pairWeights = buildPairWeights(recentHistory, nameKey);
+
+  const grouped = optimizeTeams(presentPlayers, numTeams, { skills: SKILLS, pairWeights, keyOf: nameKey });
+  return grouped.map((list, idx) => {
+    const total = list.reduce((acc, p) => acc + overallSkill(p), 0);
+    return {
+      color: TEAM_COLORS[idx % TEAM_COLORS.length],
+      players: list,
+      total,
+      avg: list.length ? total / list.length : 0,
+    };
+  });
 }
 
 async function onClearDraw() {
@@ -859,6 +955,7 @@ async function onClearDraw() {
   }
   currentDraw = null;
   renderTeams();
+  renderGames();
 }
 
 function renderTeams() {
@@ -873,7 +970,8 @@ function renderTeams() {
 
   panel.classList.remove("hidden");
 
-  currentDraw.teams.forEach((team) => {
+  const newModel = isNewModel(currentEnv);
+  currentDraw.teams.forEach((team, idx) => {
     const card = document.createElement("div");
     card.className = "team-card";
     card.style.setProperty("--team-color", team.colorHex);
@@ -881,18 +979,251 @@ function renderTeams() {
     const playersHtml = team.players
       .map((p) => `<div class="team-player-row"><span>${escapeHtml(p.name)}</span></div>`)
       .join("");
-    // Média de habilidade do time só aparece no modo gerencial.
-    const avgHtml = isAdmin ? `<span class="team-avg">★ ${team.avg.toFixed(2)}</span>` : "";
+    // Média de habilidade do time só aparece no modo gerencial (no novo modelo,
+    // junto com a soma de estrelas, que é o critério do equilíbrio).
+    let avgHtml = "";
+    if (isAdmin) {
+      const sumText = newModel && team.sum !== undefined ? `Σ ${team.sum} · ` : "";
+      avgHtml = `<span class="team-avg">${sumText}★ ${team.avg.toFixed(2)}</span>`;
+    }
+    // No novo modelo a ordem da lista é a ordem de entrada nos jogos.
+    const orderHtml = newModel ? `<span class="team-order">${idx + 1}º</span>` : "";
 
     card.innerHTML = `
       <div class="team-card-header">
-        <span>${team.colorName}</span>
+        <span>${orderHtml}${team.colorName}</span>
         ${avgHtml}
       </div>
       <div class="team-card-body">${playersHtml}</div>
     `;
     grid.appendChild(card);
   });
+}
+
+// ---------- Jogos da noite (novo modelo) ----------
+// A data da noite é a data do sorteio atual (mesma usada no draw_history).
+function currentDrawDate() {
+  if (!currentDraw || !currentDraw.updated_at) return null;
+  return localDateStr(new Date(currentDraw.updated_at));
+}
+
+// O Supabase devolve no máximo 1000 linhas por consulta; busca em páginas.
+async function fetchAllRows(buildQuery) {
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await buildQuery().range(from, from + 999);
+    if (error) {
+      console.error(error);
+      return rows;
+    }
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return rows;
+}
+
+async function loadGamesData() {
+  if (!isNewModel(currentEnv)) {
+    envGames = [];
+    envHistoryRows = [];
+    renderGames();
+    return;
+  }
+  const env = currentEnv;
+  const [games, history] = await Promise.all([
+    fetchAllRows(() =>
+      supabaseClient.from("games").select("*").eq("environment", env).order("draw_date").order("game_no")
+    ),
+    fetchAllRows(() =>
+      supabaseClient.from("draw_history").select("draw_date, teams").eq("environment", env).order("draw_date")
+    ),
+  ]);
+  if (env !== currentEnv) return; // trocou de aba enquanto carregava
+  envGames = games;
+  envHistoryRows = history;
+  renderGames();
+}
+
+let recordingGame = false;
+
+async function onRecordGame(winnerName) {
+  if (recordingGame) return;
+  const date = currentDrawDate();
+  if (!date) return;
+  recordingGame = true;
+  const nightGames = envGames.filter((g) => g.draw_date === date);
+  const rot = computeRotation(
+    currentDraw.teams.map((t) => t.colorName),
+    nightGames,
+    NEW_MODEL_ENVS[currentEnv].streakLimit
+  );
+  const gameNo = nightGames.reduce((m, g) => Math.max(m, g.game_no), 0) + 1;
+  const { error } = await supabaseClient.from("games").insert([
+    {
+      environment: currentEnv,
+      draw_date: date,
+      game_no: gameNo,
+      team_a: rot.court[0],
+      team_b: rot.court[1],
+      winner: winnerName,
+    },
+  ]);
+  if (error) {
+    alert(
+      error.code === "23505"
+        ? "Outro dispositivo acabou de registrar este jogo. A tela foi atualizada."
+        : "Erro ao registrar jogo: " + error.message
+    );
+  }
+  await loadGamesData();
+  recordingGame = false;
+}
+
+async function onUndoGame() {
+  const date = currentDrawDate();
+  const nightGames = envGames.filter((g) => g.draw_date === date);
+  if (nightGames.length === 0) return;
+  const last = nightGames.reduce((a, b) => (b.game_no > a.game_no ? b : a));
+  if (!confirm(`Desfazer o jogo ${last.game_no} (${last.winner} venceu)?`)) return;
+  const { error } = await supabaseClient
+    .from("games")
+    .delete()
+    .eq("environment", currentEnv)
+    .eq("draw_date", date)
+    .eq("game_no", last.game_no);
+  if (error) alert("Erro ao desfazer jogo: " + error.message);
+  await loadGamesData();
+}
+
+function teamColorHex(name) {
+  const t = currentDraw && currentDraw.teams.find((x) => x.colorName === name);
+  return t ? t.colorHex : "#999";
+}
+
+function renderGames() {
+  const panel = document.getElementById("games-panel");
+  const statsPanel = document.getElementById("stats-panel");
+  const newModel = isNewModel(currentEnv);
+  statsPanel.classList.toggle("hidden", !newModel);
+  if (newModel) renderPlayerStats();
+
+  const show = newModel && currentDraw && Array.isArray(currentDraw.teams) && currentDraw.teams.length >= 2;
+  panel.classList.toggle("hidden", !show);
+  if (!show) return;
+
+  const streakLimit = NEW_MODEL_ENVS[currentEnv].streakLimit;
+  const date = currentDrawDate();
+  const nightGames = envGames.filter((g) => g.draw_date === date);
+  const teamsByName = Object.fromEntries(currentDraw.teams.map((t) => [t.colorName, t]));
+  const rot = computeRotation(currentDraw.teams.map((t) => t.colorName), nightGames, streakLimit);
+
+  document.getElementById("games-subtitle").textContent =
+    `Toque no time que venceu. Quem fizer ${streakLimit} vitórias seguidas sai junto com o time que perdeu. ` +
+    `${nightGames.length} jogo(s) registrado(s) nesta noite.`;
+
+  // Em quadra
+  const court = document.getElementById("games-court");
+  court.innerHTML = "";
+  rot.court.forEach((name) => {
+    const team = teamsByName[name];
+    const wins = rot.wins[name] || 0;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "court-team-btn";
+    btn.style.setProperty("--team-color", team.colorHex);
+    const streakText = wins > 0 ? `🔥 ${wins} seguida${wins > 1 ? "s" : ""} (sai com ${streakLimit})` : "entrou agora";
+    btn.innerHTML = `
+      <span class="court-team-name">${escapeHtml(name)} venceu</span>
+      <span class="court-team-players">${team.players.map((p) => escapeHtml(p.name)).join(", ")}</span>
+      <span class="court-team-streak">${streakText}</span>
+    `;
+    btn.addEventListener("click", () => onRecordGame(name));
+    court.appendChild(btn);
+  });
+
+  // Fila
+  document.getElementById("games-queue").innerHTML =
+    "<strong>Fila:</strong> " +
+    (rot.queue.length
+      ? rot.queue
+          .map((n, i) => `<span class="queue-chip" style="--team-color:${teamsByName[n].colorHex}">${i + 1}º ${escapeHtml(n)}</span>`)
+          .join(" ")
+      : "—");
+
+  document.getElementById("btn-undo-game").disabled = nightGames.length === 0;
+
+  // Placar da noite
+  const score = document.getElementById("games-scoreboard");
+  score.innerHTML =
+    "<thead><tr><th>Time</th><th>J</th><th>V</th><th>D</th></tr></thead><tbody>" +
+    currentDraw.teams
+      .map((t) => {
+        const r = rot.record[t.colorName];
+        return `<tr><td><span class="queue-chip" style="--team-color:${t.colorHex}">${escapeHtml(t.colorName)}</span></td><td>${r.games}</td><td>${r.wins}</td><td>${r.losses}</td></tr>`;
+      })
+      .join("") +
+    "</tbody>";
+
+  // Lista dos jogos (mais recente primeiro)
+  const log = document.getElementById("games-log");
+  log.innerHTML = nightGames.length
+    ? [...nightGames]
+        .reverse()
+        .map(
+          (g) =>
+            `<li><span class="log-no">Jogo ${g.game_no}</span> ${escapeHtml(g.team_a)} × ${escapeHtml(g.team_b)} — <strong style="color:${teamColorHex(g.winner)}">${escapeHtml(g.winner)}</strong> venceu</li>`
+        )
+        .join("")
+    : '<li class="empty-msg">Nenhum jogo registrado ainda.</li>';
+}
+
+// Aproveitamento por jogador, somando todas as noites da aba. Cada jogo conta
+// para os jogadores que estavam nos dois times daquela noite.
+function renderPlayerStats() {
+  const table = document.getElementById("stats-table");
+  const teamsByDate = {};
+  envHistoryRows.forEach((h) => { teamsByDate[h.draw_date] = h.teams; });
+
+  const stats = new Map();
+  envGames.forEach((g) => {
+    const teams = teamsByDate[g.draw_date];
+    if (!teams) return;
+    [g.team_a, g.team_b].forEach((name) => {
+      const team = teams.find((t) => t.colorName === name);
+      if (!team) return;
+      team.players.forEach((p) => {
+        const key = String(p.name).trim().toLowerCase();
+        const s = stats.get(key) || { name: p.name, games: 0, wins: 0, nights: new Set() };
+        s.games++;
+        if (g.winner === name) s.wins++;
+        s.nights.add(g.draw_date);
+        stats.set(key, s);
+      });
+    });
+  });
+
+  const rows = [...stats.values()].sort(
+    (a, b) => b.wins / b.games - a.wins / a.games || b.games - a.games || a.name.localeCompare(b.name, "pt-BR")
+  );
+  if (rows.length === 0) {
+    table.innerHTML = '<tbody><tr><td class="empty-msg">Ainda não há jogos registrados nesta aba.</td></tr></tbody>';
+    return;
+  }
+
+  const sumByName = {};
+  players.forEach((p) => { sumByName[String(p.name).trim().toLowerCase()] = skillTotal(p, SKILLS); });
+  // A nota só aparece no modo gerencial, como no resto do app.
+  const notaHead = isAdmin ? "<th>Nota total</th>" : "";
+  table.innerHTML =
+    `<thead><tr><th>Jogador</th><th>Noites</th><th>Jogos</th><th>Vitórias</th><th>Aproveitamento</th>${notaHead}</tr></thead><tbody>` +
+    rows
+      .map((s) => {
+        const pct = Math.round((s.wins / s.games) * 100);
+        const nota = isAdmin ? `<td>${sumByName[String(s.name).trim().toLowerCase()] ?? "—"}</td>` : "";
+        return `<tr><td>${escapeHtml(s.name)}</td><td>${s.nights.size}</td><td>${s.games}</td><td>${s.wins}</td><td><strong>${pct}%</strong></td>${nota}</tr>`;
+      })
+      .join("") +
+    "</tbody>";
 }
 
 // ---------- Calendar (histórico de sorteios por mês) ----------
@@ -970,7 +1301,7 @@ function renderCalendar() {
     if (dayData) {
       const badges = document.createElement("span");
       badges.className = "calendar-day-badges";
-      badges.textContent = `${dayData.quarta ? "🌅" : ""}${dayData.sexta ? "🌇" : ""}`;
+      badges.textContent = ENV_ORDER.map((e) => (dayData[e] ? ENV_EMOJI[e] : "")).join("");
       cell.appendChild(badges);
       cell.addEventListener("click", () => {
         selectedCalendarDate = dateStr;
@@ -998,7 +1329,7 @@ function renderCalendarDetail(dateStr) {
   detail.classList.remove("hidden");
   detail.innerHTML = "";
 
-  ["quarta", "sexta"].forEach((env) => {
+  ENV_ORDER.forEach((env) => {
     const row = dayData[env];
     if (!row) return;
 
@@ -1006,7 +1337,7 @@ function renderCalendarDetail(dateStr) {
     block.className = "calendar-detail-env";
 
     const title = document.createElement("h3");
-    title.textContent = `${env === "quarta" ? "🌅" : "🌇"} ${ENV_LABELS[env]} — ${formatDatePt(dateStr)}`;
+    title.textContent = `${ENV_EMOJI[env]} ${ENV_LABELS[env]} — ${formatDatePt(dateStr)}`;
     block.appendChild(title);
 
     const teamsGrid = document.createElement("div");

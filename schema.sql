@@ -4,7 +4,7 @@
 
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
-  environment text not null check (environment in ('quarta','sexta')),
+  environment text not null check (environment in ('quarta','sexta','quarta_teste')),
   name text not null,
   skill_saque int not null default 0 check (skill_saque between 0 and 5),
   skill_levantamento int not null default 0 check (skill_levantamento between 0 and 5),
@@ -16,7 +16,7 @@ create table if not exists players (
 );
 
 create table if not exists draws (
-  environment text primary key check (environment in ('quarta','sexta')),
+  environment text primary key check (environment in ('quarta','sexta','quarta_teste')),
   num_teams int not null default 2,
   teams jsonb,
   updated_at timestamptz default now()
@@ -40,7 +40,7 @@ create table if not exists known_players (
 -- as duplas nas próximas vezes. Resortear no mesmo dia substitui o registro
 -- daquele dia (upsert por environment+draw_date) em vez de acumular ruído.
 create table if not exists draw_history (
-  environment text not null check (environment in ('quarta','sexta')),
+  environment text not null check (environment in ('quarta','sexta','quarta_teste')),
   draw_date date not null,
   num_teams int not null,
   teams jsonb not null,
@@ -165,4 +165,38 @@ begin
 if not exists (select 1 from information_schema.columns where table_name = 'known_players' and column_name = 'skill_ataque') then
   alter table known_players add column skill_ataque int not null default 0 check (skill_ataque between 0 and 5);
 end if;
+end $$;
+
+-- ================= NOVO MODELO (aba "Quarta Teste") =================
+-- Registro dos jogos da noite: um registro por jogo (quem enfrentou quem e quem
+-- venceu). Serve para a fila de rotação e para o aproveitamento por jogador.
+create table if not exists games (
+  environment text not null check (environment in ('quarta','sexta','quarta_teste')),
+  draw_date date not null,
+  game_no int not null,
+  team_a text not null,
+  team_b text not null,
+  winner text not null,
+  created_at timestamptz default now(),
+  primary key (environment, draw_date, game_no)
+);
+
+alter table games enable row level security;
+drop policy if exists "public read games" on games;
+drop policy if exists "public insert games" on games;
+drop policy if exists "public delete games" on games;
+create policy "public read games" on games for select using (true);
+create policy "public insert games" on games for insert with check (true);
+create policy "public delete games" on games for delete using (true);
+
+alter publication supabase_realtime add table games;
+
+-- Projetos que já existiam: libera o novo ambiente "quarta_teste" nas tabelas.
+do $$
+declare t text;
+begin
+  foreach t in array array['players','draws','draw_history'] loop
+    execute format('alter table %I drop constraint if exists %I', t, t || '_environment_check');
+    execute format('alter table %I add constraint %I check (environment in (''quarta'',''sexta'',''quarta_teste''))', t, t || '_environment_check');
+  end loop;
 end $$;

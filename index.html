@@ -49,6 +49,7 @@
     <nav class="day-tabs">
       <button class="day-tab" data-env="quarta">🌅 Quarta-feira</button>
       <button class="day-tab" data-env="sexta">🌇 Sexta-feira</button>
+      <button class="day-tab" data-env="quarta_teste">🧪 Quarta Teste</button>
     </nav>
   </header>
 
@@ -79,7 +80,7 @@
         <button id="btn-shuffle" class="btn btn-shuffle">🔀 Sortear Times</button>
         <button id="btn-clear-draw" class="btn btn-ghost">↺ Limpar Sorteio</button>
       </div>
-      <p class="hint">O sorteio equilibra os times pela nota geral e por habilidade (saque, ataque, recepção...), evitando concentrar os especialistas de uma mesma habilidade num só time, e varia as duplas que já jogaram juntas recentemente.</p>
+      <p class="hint" id="hint-text">O sorteio equilibra os times pela nota geral e por habilidade (saque, ataque, recepção...), evitando concentrar os especialistas de uma mesma habilidade num só time, e varia as duplas que já jogaram juntas recentemente.</p>
     </section>
 
     <section class="panel teams-panel hidden" id="teams-panel">
@@ -88,6 +89,38 @@
         <p class="subtitle">Fica visível para todos até o próximo sorteio ser feito.</p>
       </div>
       <div class="teams-grid" id="teams-grid"></div>
+    </section>
+
+    <section class="panel games-panel hidden" id="games-panel">
+      <div class="panel-header">
+        <h2>🏆 Jogos da noite</h2>
+        <p class="subtitle" id="games-subtitle"></p>
+      </div>
+      <div class="games-court" id="games-court"></div>
+      <p class="games-queue" id="games-queue"></p>
+      <div class="action-row">
+        <button id="btn-undo-game" class="btn btn-ghost" type="button">↩ Desfazer último jogo</button>
+      </div>
+      <div class="games-columns">
+        <div>
+          <h3>Placar da noite</h3>
+          <table class="games-table" id="games-scoreboard"></table>
+        </div>
+        <div>
+          <h3>Jogos</h3>
+          <ul class="games-log" id="games-log"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel stats-panel hidden" id="stats-panel">
+      <div class="panel-header">
+        <h2>📊 Aproveitamento por jogador</h2>
+        <p class="subtitle">Vitórias ÷ jogos de todos os jogos registrados nesta aba, somando as noites.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="games-table stats-table" id="stats-table"></table>
+      </div>
     </section>
 
     <section class="panel players-panel">
@@ -138,6 +171,7 @@
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="logic.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
