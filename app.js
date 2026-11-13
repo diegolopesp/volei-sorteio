@@ -27,7 +27,7 @@ function isNewModel(env) {
   return Boolean(NEW_MODEL_ENVS[env]);
 }
 
-// As 6 habilidades avaliadas, cada uma de 0 a 5 estrelas.
+// As 7 habilidades avaliadas, cada uma de 0 a 5 estrelas.
 const SKILLS = [
   { key: "skill_saque", label: "Saque" },
   { key: "skill_levantamento", label: "Levant." },
@@ -35,6 +35,7 @@ const SKILLS = [
   { key: "skill_movimentacao", label: "Moviment." },
   { key: "skill_ataque", label: "Ataque" },
   { key: "skill_bloqueio", label: "Bloqueio" },
+  { key: "skill_espalmada", label: "Espalmada" },
 ];
 
 let supabaseClient = null;

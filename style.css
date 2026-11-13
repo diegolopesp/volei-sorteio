@@ -393,14 +393,14 @@ body:not(.is-admin) .admin-only { display: none !important; }
    compacta o bastante pra caber Nome + Presente + 5 habilidades + Nota + Salvar
    numa tela só, sem rolagem horizontal. */
 .skill-th, .skill-td {
-  min-width: 104px;
+  min-width: 96px;
   white-space: nowrap;
 }
 .players-table .skill-select {
-  min-width: 100px;
+  min-width: 92px;
   font-size: 12px;
   letter-spacing: normal;
-  padding: 7px 2px 7px 6px;
+  padding: 7px 2px 7px 4px;
 }
 #player-count { font-size: 15px; line-height: 1.3; }
 .skill-badge {

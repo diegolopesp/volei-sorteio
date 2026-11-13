@@ -12,6 +12,7 @@ create table if not exists players (
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
   skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
   skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5),
+  skill_espalmada int not null default 0 check (skill_espalmada between 0 and 5),
   present boolean not null default true,
   created_at timestamptz default now()
 );
@@ -34,6 +35,7 @@ create table if not exists known_players (
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
   skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
   skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5),
+  skill_espalmada int not null default 0 check (skill_espalmada between 0 and 5),
   updated_at timestamptz default now()
 );
 
@@ -206,3 +208,7 @@ end $$;
 -- Habilidade "Bloqueio" (0 a 5 estrelas) — projetos que já existiam.
 alter table players add column if not exists skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5);
 alter table known_players add column if not exists skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5);
+
+-- Habilidade "Espalmada" (0 a 5 estrelas) — projetos que já existiam.
+alter table players add column if not exists skill_espalmada int not null default 0 check (skill_espalmada between 0 and 5);
+alter table known_players add column if not exists skill_espalmada int not null default 0 check (skill_espalmada between 0 and 5);
