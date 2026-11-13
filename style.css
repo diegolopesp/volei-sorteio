@@ -345,7 +345,9 @@ body:not(.is-admin) .admin-only { display: none !important; }
   color: var(--ink);
 }
 
-.table-wrap { overflow-x: auto; }
+/* A lista rola dentro do próprio quadro, com o cabeçalho (habilidades) congelado no
+   topo, como "congelar painel" no Excel. */
+.table-wrap { overflow: auto; max-height: 75vh; }
 .players-table { width: 100%; border-collapse: collapse; }
 .players-table th {
   text-align: left;
@@ -355,6 +357,11 @@ body:not(.is-admin) .admin-only { display: none !important; }
   color: var(--ink-soft);
   padding: 8px 6px;
   border-bottom: 2px solid var(--sand);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--white);
+  box-shadow: 0 2px 0 var(--sand);
 }
 .players-table td {
   padding: 6px 6px;
