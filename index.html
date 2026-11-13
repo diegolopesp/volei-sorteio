@@ -129,6 +129,18 @@
         <p class="subtitle" id="players-subtitle">Marque quem está presente hoje. As notas de habilidade só aparecem no modo gerencial.</p>
       </div>
 
+      <div class="players-filter">
+        <label class="filter-check"><input type="checkbox" id="present-first" /> Presentes primeiro</label>
+        <span class="filter-sort admin-only">
+          <label for="sort-key">Ordenar por</label>
+          <select id="sort-key"></select>
+          <select id="sort-dir" aria-label="Direção da ordenação">
+            <option value="desc">Maior → menor</option>
+            <option value="asc">Menor → maior</option>
+          </select>
+        </span>
+      </div>
+
       <div id="known-players-wrap" class="known-players-wrap hidden">
         <p class="known-players-label">Já jogaram antes — clique para adicionar:</p>
         <div id="known-players-list" class="known-players-list"></div>

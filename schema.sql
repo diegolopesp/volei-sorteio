@@ -11,6 +11,7 @@ create table if not exists players (
   skill_recepcao int not null default 0 check (skill_recepcao between 0 and 5),
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
   skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
+  skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5),
   present boolean not null default true,
   created_at timestamptz default now()
 );
@@ -32,6 +33,7 @@ create table if not exists known_players (
   skill_recepcao int not null default 0 check (skill_recepcao between 0 and 5),
   skill_movimentacao int not null default 0 check (skill_movimentacao between 0 and 5),
   skill_ataque int not null default 0 check (skill_ataque between 0 and 5),
+  skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5),
   updated_at timestamptz default now()
 );
 
@@ -200,3 +202,7 @@ begin
     execute format('alter table %I add constraint %I check (environment in (''quarta'',''sexta'',''quarta_teste''))', t, t || '_environment_check');
   end loop;
 end $$;
+
+-- Habilidade "Bloqueio" (0 a 5 estrelas) — projetos que já existiam.
+alter table players add column if not exists skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5);
+alter table known_players add column if not exists skill_bloqueio int not null default 0 check (skill_bloqueio between 0 and 5);

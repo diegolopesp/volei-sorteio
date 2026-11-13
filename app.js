@@ -27,13 +27,14 @@ function isNewModel(env) {
   return Boolean(NEW_MODEL_ENVS[env]);
 }
 
-// As 5 habilidades avaliadas, cada uma de 0 a 5 estrelas.
+// As 6 habilidades avaliadas, cada uma de 0 a 5 estrelas.
 const SKILLS = [
   { key: "skill_saque", label: "Saque" },
   { key: "skill_levantamento", label: "Levant." },
   { key: "skill_recepcao", label: "Recep." },
   { key: "skill_movimentacao", label: "Moviment." },
   { key: "skill_ataque", label: "Ataque" },
+  { key: "skill_bloqueio", label: "Bloqueio" },
 ];
 
 let supabaseClient = null;
@@ -42,8 +43,18 @@ let players = []; // players for current env
 let currentDraw = null; // { num_teams, teams }
 let playersChannel = null;
 let drawsChannel = null;
-let extraRows = 0; // blank rows added beyond the minimum, via "+ Adicionar linha"
-const MIN_PLAYER_ROWS = 25;
+let extraRows = 0; // blank rows added beyond the default ones, via "+ Adicionar linha"
+// Linhas em branco sempre disponíveis (modo gerencial) além dos jogadores já cadastrados.
+const EMPTY_ROWS = 10;
+
+// Filtro/ordenação da lista de jogadores (vale para todas as abas).
+const SORT_OPTIONS = [
+  { value: "overall", label: "Nota geral (média/total)" },
+  ...SKILLS.map((s) => ({ value: s.key, label: s.label })),
+];
+let sortKey = "overall";
+let sortDir = "desc"; // "desc" = maior → menor, "asc" = menor → maior
+let presentFirst = false;
 let knownPlayers = []; // shared directory of every player ever added, across both days
 let knownPlayersChannel = null;
 let isAdmin = false; // unlocked with ADMIN_PASSWORD — controls visibility of skill notes
@@ -68,7 +79,7 @@ const MONTH_NAMES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-// Média das 4 habilidades — usada para balancear os times. Só é exibida na UI
+// Média das habilidades — usada para balancear os times. Só é exibida na UI
 // quando isAdmin é true (o objeto do jogador continua tendo os valores porque
 // o dado chega do Supabase para qualquer usuário logado; o que fica restrito
 // é a exibição na tela, no mesmo nível de proteção da senha de acesso geral —
@@ -165,6 +176,7 @@ function startApp() {
   document.getElementById("btn-shuffle").addEventListener("click", onShuffle);
   document.getElementById("btn-clear-draw").addEventListener("click", onClearDraw);
   document.getElementById("btn-undo-game").addEventListener("click", onUndoGame);
+  initPlayerFilters();
 
   document.getElementById("cal-prev").addEventListener("click", () => changeCalendarMonth(-1));
   document.getElementById("cal-next").addEventListener("click", () => changeCalendarMonth(1));
@@ -538,6 +550,38 @@ function renderTableHead() {
   thead.innerHTML = `<tr>${cols}</tr>`;
 }
 
+// Ordem da lista: opcionalmente presentes primeiro, depois pela habilidade (ou nota
+// geral) escolhida, na direção escolhida. Empates desempatam pela nota geral e nome.
+function sortedPlayers() {
+  const value = (p) => (sortKey === "overall" ? overallSkill(p) : Number(p[sortKey]) || 0);
+  const dir = sortDir === "asc" ? 1 : -1;
+  return [...players].sort((a, b) => {
+    if (presentFirst) {
+      const pa = a.present !== false ? 0 : 1;
+      const pb = b.present !== false ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+    }
+    return (
+      dir * (value(a) - value(b)) ||
+      overallSkill(b) - overallSkill(a) ||
+      a.name.localeCompare(b.name, "pt-BR")
+    );
+  });
+}
+
+function initPlayerFilters() {
+  const select = document.getElementById("sort-key");
+  SORT_OPTIONS.forEach((o) => {
+    const opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.label;
+    select.appendChild(opt);
+  });
+  select.addEventListener("change", () => { sortKey = select.value; renderPlayers(); });
+  document.getElementById("sort-dir").addEventListener("change", (e) => { sortDir = e.target.value; renderPlayers(); });
+  document.getElementById("present-first").addEventListener("change", (e) => { presentFirst = e.target.checked; renderPlayers(); });
+}
+
 function renderPlayers() {
   renderTableHead();
   const tbody = document.getElementById("players-tbody");
@@ -545,10 +589,11 @@ function renderPlayers() {
 
   // Non-admins never get blank editable rows — they can't add/edit players or
   // see notas, only the roster that already exists plus a presence checkbox.
-  const totalRows = isAdmin ? Math.max(MIN_PLAYER_ROWS, players.length) + extraRows : players.length;
+  const list = sortedPlayers();
+  const totalRows = isAdmin ? list.length + EMPTY_ROWS + extraRows : list.length;
 
   for (let i = 0; i < totalRows; i++) {
-    const p = players[i] || null;
+    const p = list[i] || null;
     if (!p && !isAdmin) continue;
 
     const tr = document.createElement("tr");
